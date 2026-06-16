@@ -1,0 +1,23 @@
+{
+    "name": "componenta/identity",
+    "description": "Identity contracts and immutable identities for Componenta",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": "^8.4",
+        "componenta/uuid": "^1.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Componenta\\Identity\\": "src/"
+        }
+    },
+    "minimum-stability": "stable",
+    "extra": {
+        "componenta": {
+            "config-providers": [
+                "Componenta\\Identity\\ConfigProvider"
+            ]
+        }
+    }
+}
