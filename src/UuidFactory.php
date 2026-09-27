@@ -421,11 +421,15 @@ final class UuidFactory implements UuidFactoryInterface
 
         $parts = unpack('Nhigh/Nlow', $bytes);
 
-        if ($parts === false) {
+        if (
+            $parts === false
+            || !is_int($parts['high'])
+            || !is_int($parts['low'])
+        ) {
             throw new \RuntimeException('Failed to unpack random UUIDv7 payload.');
         }
 
-        return ((int) $parts['high'] << 32) | (int) $parts['low'];
+        return ($parts['high'] << 32) | $parts['low'];
     }
 
     /**

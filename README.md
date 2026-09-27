@@ -15,6 +15,7 @@ When `componenta/composer-plugin` is installed, the provider is added to the gen
 
 - PHP 8.4+
 - 64-bit PHP runtime for `UuidFactory`
+- `componenta/config ^3.0` for the shipped `ConfigProvider`
 
 ## Related Packages
 
@@ -23,7 +24,7 @@ When `componenta/composer-plugin` is installed, the provider is added to the gen
 | `componenta/policy` | Uses `IdentityInterface` for actors and owned resources. |
 | `componenta/cqrs` | `Operation` uses UUIDs as operation identifiers. |
 | `componenta/di` | Registers `UuidFactoryInterface` through `ConfigProvider`. |
-| `componenta/uuid` | Legacy Ramsey compatibility; new domain code should prefer this package. |
+| `componenta/uuid` | Optional legacy Ramsey compatibility. Require it explicitly if your application still uses it; Identity no longer installs it. |
 
 ## What It Provides
 

@@ -5,7 +5,7 @@
     "license": "MIT",
     "require": {
         "php": "^8.4",
-        "componenta/uuid": "^1.0"
+        "componenta/config": "^3.0"
     },
     "autoload": {
         "psr-4": {
@@ -19,5 +19,22 @@
                 "Componenta\\Identity\\ConfigProvider"
             ]
         }
+    },
+    "require-dev": {
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^12.0"
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Componenta\\Identity\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "@php vendor/bin/phpunit --bootstrap vendor/autoload.php tests",
+        "phpstan": "@php vendor/bin/phpstan analyse src --level=max",
+        "check": [
+            "@phpstan",
+            "@test"
+        ]
     }
 }

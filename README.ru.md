@@ -15,6 +15,7 @@ composer require componenta/identity
 
 - PHP 8.4+
 - 64-bit PHP для `UuidFactory`
+- `componenta/config ^3.0` для входящего в пакет `ConfigProvider`
 
 ## Связанные пакеты
 
@@ -23,7 +24,7 @@ composer require componenta/identity
 | `componenta/policy` | Использует `IdentityInterface` для акторов и владельцев ресурсов. |
 | `componenta/cqrs` | `Operation` генерирует UUID для идентификатора операции. |
 | `componenta/di` | Регистрирует `UuidFactoryInterface` через `ConfigProvider`. |
-| `componenta/uuid` | Старый compatibility-провайдер Ramsey UUID; для нового доменного кода используйте этот пакет. |
+| `componenta/uuid` | Необязательный старый адаптер Ramsey UUID. Подключайте его явно, если приложение ещё использует его: Identity больше не устанавливает этот пакет. |
 
 ## Что предоставляет пакет
 
