@@ -287,4 +287,4 @@ composer stress
 
 ## Лицензия
 
-MIT, согласно [composer.json](composer.json).
+[Лицензия MIT](LICENSE).

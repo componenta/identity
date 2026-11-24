@@ -287,4 +287,4 @@ For additional test diagnostics, run `composer test:negative` on a system with P
 
 ## License
 
-MIT, as declared in [composer.json](composer.json).
+[MIT License](LICENSE).
