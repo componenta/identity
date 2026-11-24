@@ -3,10 +3,9 @@
 declare(strict_types=1);
 
 use Componenta\Identity\RfcUuidInterface;
+use Componenta\Identity\Tests\Fixture\TextUuid;
 use Componenta\Identity\Uuid;
 use Componenta\Identity\UuidFactory;
-use Componenta\Identity\UuidGenerationVersion;
-use Componenta\Identity\UuidInterface;
 use Componenta\Identity\UuidVariant;
 
 covers(Uuid::class);
@@ -44,15 +43,7 @@ it('compares UUID values rather than object identity', function (): void {
 
 it('accepts an alternative implementation of the minimal UUID contract in value equality', function (): void {
     $uuid = Uuid::fromString('018f6d5d-3f7a-7a9b-8c2f-123456789abc');
-    $other = new readonly class ('018f6d5d-3f7a-7a9b-8c2f-123456789abc') implements UuidInterface {
-        public function __construct(private string $text) {}
-        public function __toString(): string { return $this->text; }
-        public function toString(): string { return $this->text; }
-        public function equals(UuidInterface $other): bool
-        {
-            return $this->text === $other->toString();
-        }
-    };
+    $other = new TextUuid('018f6d5d-3f7a-7a9b-8c2f-123456789abc');
 
     expect($uuid->equals($other))->toBeTrue()
         ->and($other->equals($uuid))->toBeTrue()

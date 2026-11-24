@@ -22,7 +22,8 @@ interface RfcUuidInterface extends UuidInterface
     /**
      * Raw 16-octet binary representation of the UUID.
      *
-     * MUST be exactly 16 bytes long.
+     * MUST be exactly 16 bytes long, in network byte order (RFC 9562 § 4),
+     * and represent the same UUID as toString().
      */
     public string $bytes { get; }
 

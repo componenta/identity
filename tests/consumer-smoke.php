@@ -5,6 +5,8 @@ declare(strict_types=1);
 use Componenta\Config\ConfigFactory;
 use Componenta\Config\Environment;
 use Componenta\DI\ContainerFactory;
+use Componenta\Identity\ComparableUuidInterface;
+use Componenta\Identity\ComparisonResult;
 use Componenta\Identity\ConfigProvider;
 use Componenta\Identity\RfcUuidInterface;
 use Componenta\Identity\Uuid;
@@ -42,6 +44,9 @@ verifyConsumer($first instanceof RfcUuidInterface && $second instanceof RfcUuidI
 verifyConsumer($first->version === 7 && $second->version === 7 && $first->variant === UuidVariant::Rfc, 'Default UUIDv7');
 verifyConsumer(strcmp($second->bytes, $first->bytes) > 0 && !$first->equals($second), 'Shared generator preserves UUIDv7 ordering');
 verifyConsumer($first->equals(Uuid::fromString($first->toString())), 'Canonical round trip');
+verifyConsumer($first instanceof ComparableUuidInterface && $second instanceof ComparableUuidInterface, 'Standard generator supports optional UUID ordering');
+verifyConsumer($first->compareTo($second) === ComparisonResult::Less && $second->compareTo($first) === ComparisonResult::Greater, 'Ordering through the public comparison contract');
+verifyConsumer($first->compareTo(Uuid::fromBytes($first->bytes)) === ComparisonResult::Equal, 'Equal UUID values compare equally');
 
 $replacement = new UuidFactory(UuidGenerationVersion::V4);
 $container->set(UuidFactoryInterface::class, $replacement);
