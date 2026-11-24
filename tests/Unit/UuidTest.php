@@ -204,7 +204,9 @@ it('does not reflect an arbitrarily long malformed value in an exception message
         test()->fail('Invalid UUID accepted.');
     } catch (InvalidArgumentException $exception) {
         expect(strlen($exception->getMessage()))->toBeLessThan(128)
-            ->and($exception->getMessage())->not->toContain('confidential-value', "\r", "\n");
+            ->and($exception->getMessage())->not->toContain('confidential-value')
+            ->and($exception->getMessage())->not->toContain("\r")
+            ->and($exception->getMessage())->not->toContain("\n");
     }
 });
 
@@ -246,3 +248,23 @@ it('redacts the input in library exception trace frames when argument capture is
         }
     }
 })->with(['text', 'bytes', 'factory bytes', 'restore UUID', 'restore factory']);
+
+it('round trips every raw version nibble through native serialization', function (int $version): void {
+    $bytes = str_repeat("\0", 6) . chr(($version << 4) | 0x0f) . "\x00\x80" . str_repeat("\0", 7);
+    $uuid = Uuid::fromBytes($bytes);
+    $restored = unserialize(serialize($uuid));
+
+    expect($restored)->toBeInstanceOf(Uuid::class)
+        ->and($restored->bytes)->toBe($bytes)
+        ->and($restored->version)->toBe($version);
+})->with(range(0, 15));
+
+it('preserves the public variant enum backing values', function (UuidVariant $variant, int $value): void {
+    expect($variant->value)->toBe($value)
+        ->and(UuidVariant::from($value))->toBe($variant);
+})->with([
+    [UuidVariant::Ncs, 0],
+    [UuidVariant::Rfc, 1],
+    [UuidVariant::Microsoft, 2],
+    [UuidVariant::Future, 3],
+]);

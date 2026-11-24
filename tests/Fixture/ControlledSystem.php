@@ -11,6 +11,7 @@ final class ControlledSystem
 {
     /** @var array{sec: int, usec: int}|null */
     public static ?array $time = null;
+    public static int|false|null $pid = null;
     public static int|Throwable|null $integer = null;
     public static string|Throwable|null $bytes = null;
 
@@ -22,6 +23,7 @@ final class ControlledSystem
     public static function reset(): void
     {
         self::$time = null;
+        self::$pid = null;
         self::$integer = null;
         self::$bytes = null;
     }

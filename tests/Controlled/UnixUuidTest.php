@@ -134,3 +134,12 @@ it('recovers the same next v7 prefix after both rollover entropy failures', func
     expect(UuidFields::unixMilliseconds($id))->toBe(1645557743000)
         ->and(UuidFields::counter($id))->toBe(17);
 });
+
+it('encodes microsecond readings using the containing Unix millisecond', function (int $micros, int $expected): void {
+    System::freeze(1645557742, $micros);
+    expect(UuidFields::unixMilliseconds((new UuidFactory())->v7()))->toBe($expected);
+})->with([
+    [999, 1645557742000],
+    [1000, 1645557742001],
+    [999999, 1645557742999],
+]);

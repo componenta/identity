@@ -94,3 +94,33 @@ it('generates the final Gregorian ticks without wrap and rejects exhaustion', fu
     'v1 recover after entropy failure' => ['v1', true],
     'v6 recover after entropy failure' => ['v6', true],
 ]);
+
+it('rejects physical time immediately beyond the last representable Gregorian tick', function (string $method): void {
+    System::freeze(103072857660, 684698);
+    expect(fn () => (new UuidFactory())->$method())->toThrow(OverflowException::class);
+})->with(['v1', 'v6']);
+
+it('refreshes v1 node and clock sequence after a process identity change', function (): void {
+    System::freeze(1645557742);
+    System::$pid = 100;
+    System::$integer = 0;
+    System::$bytes = hex2bin('001122334455');
+    $factory = new UuidFactory();
+    $first = Uuid::fromString($factory->v1()->toString());
+
+    System::$pid = 200;
+    System::$integer = 123;
+    System::$bytes = hex2bin('66778899aabb');
+    $second = Uuid::fromString($factory->v1()->toString());
+
+    expect(UuidFields::clockSequence($first))->toBe(0)
+        ->and(substr($first->bytes, 10))->toBe(hex2bin('011122334455'))
+        ->and(UuidFields::clockSequence($second))->toBe(123)
+        ->and(substr($second->bytes, 10))->toBe(hex2bin('67778899aabb'))
+        ->and(UuidFields::gregorianTicks($second))->toBeGreaterThan(UuidFields::gregorianTicks($first));
+});
+
+it('fails closed when the OS cannot identify the process owning v1 state', function (): void {
+    System::$pid = false;
+    expect(fn () => (new UuidFactory())->v1())->toThrow(RuntimeException::class, 'Unable to determine UUID generator process.');
+});

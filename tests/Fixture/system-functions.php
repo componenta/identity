@@ -44,3 +44,8 @@ function random_bytes(int $length): string
     }
     return $value;
 }
+
+function getmypid(): int|false
+{
+    return ControlledSystem::$pid ?? \getmypid();
+}

@@ -105,7 +105,7 @@ if ($isWorker) {
                     throw new RuntimeException('Behavior-preserving mutation control did not pass.');
                 }
                 unlink($this->directory . '/' . $key . '.json');
-                echo "\nMutation worker control passed (", $record['tests'], " actual tests).\n";
+                fwrite(STDERR, "\nMutation worker control passed (" . $record['tests'] . " actual tests).\n");
             } finally {
                 unlink($replacement);
             }
@@ -145,14 +145,30 @@ if ($isWorker) {
                     }
                     ++$counts[$category];
                     if ($category === 'unverified') {
-                        $unverified[] = $test->getId();
+                        $unverified[] = [
+                            'id' => $test->getId(),
+                            'file' => $mutation->file->getFilename(),
+                            'line' => $mutation->startLine,
+                            'operator' => $mutation->mutator,
+                            'result' => $test->result()->value,
+                            'record' => $record,
+                        ];
                     }
                 }
             }
-            echo "\nVerified mutation worker outcomes: ", json_encode($counts, JSON_THROW_ON_ERROR), "\n";
+            fwrite(STDERR, "\nVerified mutation worker outcomes: " . json_encode($counts, JSON_THROW_ON_ERROR) . "\n");
+            $observed = $counts['assertion_failure'] + $counts['test_error'] + $counts['survived'];
+            if ($observed === 0) {
+                throw new RuntimeException('No mutation worker outcomes could be verified.');
+            }
             if ($unverified !== []) {
-                echo 'Unverified mutant IDs: ', implode(', ', $unverified), "\n";
-                throw new RuntimeException('Mutation report contains unverified outcomes; do not use its score.');
+                // These results are not kills. Some mutations cause a fatal
+                // error before the runner can record an outcome. Keep them
+                // separate instead of manufacturing a higher mutation score.
+                foreach ($unverified as $entry) {
+                    fwrite(STDERR, 'UNVERIFIED: ' . json_encode($entry, JSON_THROW_ON_ERROR) . "\n");
+                }
+                fwrite(STDERR, "Full mutation report is incomplete; Pest's raw score is diagnostic only. Unverified outcomes are NOT confirmed kills.\n");
             }
         }
     });

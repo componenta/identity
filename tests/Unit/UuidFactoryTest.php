@@ -11,13 +11,19 @@ use Componenta\Identity\UuidVariant;
 
 covers(UuidFactory::class);
 
-it('generates the version configured at construction', function (UuidGenerationVersion $version): void {
+it('generates the version configured at construction', function (UuidGenerationVersion $version, int $expected): void {
     $uuid = (new UuidFactory($version))->generate();
 
     expect($uuid)->toBeInstanceOf(RfcUuidInterface::class)
-        ->and($uuid->version)->toBe($version->value)
+        ->and($version->value)->toBe($expected)
+        ->and($uuid->version)->toBe($expected)
         ->and($uuid->variant)->toBe(UuidVariant::Rfc);
-})->with(UuidGenerationVersion::cases());
+})->with([
+    [UuidGenerationVersion::V1, 1],
+    [UuidGenerationVersion::V4, 4],
+    [UuidGenerationVersion::V6, 6],
+    [UuidGenerationVersion::V7, 7],
+]);
 
 it('uses UUIDv7 by default', function (): void {
     expect(Uuid::fromString((new UuidFactory())->generate()->toString())->version)->toBe(7);
@@ -119,3 +125,10 @@ it('cannot change the configured version of an initialized factory by restoring 
     expect(fn () => $factory->__unserialize(['defaultVersion' => UuidGenerationVersion::V7]))->toThrow(Error::class);
     expect(Uuid::fromString($factory->generate()->toString())->version)->toBe(4);
 });
+
+it('accepts both endpoints of the UUIDv8 custom fields', function (string $a, int $b, string $c, string $expected): void {
+    expect((new UuidFactory())->v8($a, $b, $c)->toString())->toBe($expected);
+})->with([
+    'all zeros' => [str_repeat("\0", 6), 0, str_repeat("\0", 8), '00000000-0000-8000-8000-000000000000'],
+    'all ones' => [str_repeat("\xff", 6), 4095, str_repeat("\xff", 8), 'ffffffff-ffff-8fff-bfff-ffffffffffff'],
+]);
