@@ -119,17 +119,31 @@ final class Uuid implements RfcUuidInterface, \JsonSerializable
         return hash_equals($this->toString(), strtolower($other->toString()));
     }
 
-    /** Validate native PHP deserialization without changing its wire format. */
-    public function __wakeup(): void
+    /** @return array{bytes: string, version: int, variant: UuidVariant} */
+    public function __serialize(): array
     {
-        // Native unserialization bypasses the constructor and can omit any field.
-        // @phpstan-ignore isset.initializedProperty, isset.initializedProperty, isset.initializedProperty
-        if (!isset($this->bytes, $this->version, $this->variant)
-            || strlen($this->bytes) !== 16
-            || $this->version !== ((ord($this->bytes[6]) >> 4) & 0x0F)
-            || $this->variant !== self::detectVariant($this->bytes)) {
+        // Keep the original native serialization format for existing UUIDs.
+        return ['bytes' => $this->bytes, 'version' => $this->version, 'variant' => $this->variant];
+    }
+
+    /** @param array<array-key, mixed> $data */
+    public function __unserialize(array $data): void
+    {
+        $bytes = $data['bytes'] ?? null;
+        $version = $data['version'] ?? null;
+        $variant = $data['variant'] ?? null;
+
+        if (!is_string($bytes)
+            || strlen($bytes) !== 16
+            || $version !== ((ord($bytes[6]) >> 4) & 0x0F)
+            || $variant !== self::detectVariant($bytes)) {
             throw new \InvalidArgumentException('Invalid serialized UUID state.');
         }
+
+        // Native property hydration may bind a readonly property to a reference
+        // elsewhere in the serialized graph. Reconstruct from a by-value string
+        // instead, deriving version and variant only from that immutable value.
+        $this->__construct($bytes);
     }
 
     private static function detectVariant(string $bytes): UuidVariant

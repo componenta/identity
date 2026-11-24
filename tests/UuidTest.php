@@ -168,4 +168,42 @@ final class UuidTest extends TestCase
 
         self::assertSame('018f6d5d-3f7a-7a9b-8c2f-123456789abc', $uuid->toString());
     }
+
+
+    public function testNativeSerializationRetainsTheLegacyWireFormat(): void
+    {
+        $uuid = Uuid::fromString('018f6d5d-3f7a-7a9b-8c2f-123456789abc');
+        $legacy = 'O:' . strlen(Uuid::class) . ':"' . Uuid::class . '":3:{'
+            . serialize('bytes') . serialize($uuid->bytes)
+            . serialize('version') . serialize(7)
+            . serialize('variant') . serialize(UuidVariant::Rfc) . '}';
+
+        self::assertSame($legacy, serialize($uuid));
+        $restored = unserialize($legacy);
+        self::assertInstanceOf(Uuid::class, $restored);
+        self::assertTrue($uuid->equals($restored));
+    }
+
+    public function testRestoredUuidCannotBeMutatedThroughReferencesInTheSerializedGraph(): void
+    {
+        $uuid = Uuid::fromString('018f6d5d-3f7a-7a9b-8c2f-123456789abc');
+        $payload = 'a:4:{i:0;' . serialize($uuid) . 'i:1;R:3;i:2;R:4;i:3;R:5;}';
+        $graph = unserialize($payload);
+
+        self::assertInstanceOf(Uuid::class, $graph[0]);
+        self::assertSame($uuid->bytes, $graph[1]);
+        self::assertSame($uuid->version, $graph[2]);
+        self::assertSame($uuid->variant, $graph[3]);
+
+        // PHP native hydration can otherwise retain these three aliases even
+        // when the properties themselves are readonly and __wakeup validated.
+        $graph[1] = 'short';
+        $graph[2] = 4;
+        $graph[3] = UuidVariant::Ncs;
+
+        self::assertSame($uuid->bytes, $graph[0]->bytes);
+        self::assertSame(7, $graph[0]->version);
+        self::assertSame(UuidVariant::Rfc, $graph[0]->variant);
+        self::assertTrue($uuid->equals($graph[0]));
+    }
 }
