@@ -123,6 +123,17 @@ final class Uuid implements RfcUuidInterface, \JsonSerializable
         return hash_equals($this->toString(), strtolower($other->toString()));
     }
 
+    /** Validate native PHP deserialization without changing its wire format. */
+    public function __wakeup(): void
+    {
+        if (!isset($this->bytes, $this->version, $this->variant)
+            || strlen($this->bytes) !== 16
+            || $this->version !== ((ord($this->bytes[6]) >> 4) & 0x0F)
+            || $this->variant !== self::detectVariant($this->bytes)) {
+            throw new \InvalidArgumentException('Invalid serialized UUID state.');
+        }
+    }
+
     private static function detectVariant(string $bytes): UuidVariant
     {
         $octet = ord($bytes[8]);

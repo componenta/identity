@@ -81,3 +81,9 @@ Name-based UUIDs are deterministic for the same namespace and name.
 ## DI Registration
 
 `ConfigProvider` registers `UuidFactoryInterface` as a factory returning `UuidFactory`.
+
+## Generation, security and uniqueness
+
+UUIDv7 uses a randomly seeded 12-bit counter and fresh 62-bit cryptographically random data for every generated value (RFC 9562 §§ 5.7 and 6.2, method 1). The same factory preserves ordering through a repeated or decreasing millisecond; counter exhaustion advances its logical timestamp. Consequently, an embedded timestamp may be ahead of the wall clock. Out-of-range timestamps fail with `OverflowException` instead of wrapping. UUIDv1/v6 use a random multicast node and sequence; copying a factory or forking the process initializes independent node/sequence state. A serialized factory preserves its configured default version, not a replayable generator state; old native factory snapshots can be restored as new generators.
+
+Neither ordering across independent factories/processes nor absolute global uniqueness is guaranteed. Do not use UUIDs as bearer credentials or authorization checks. Prefer UUIDv4 if random identifiers are needed; use independent cryptographic tokens for secrets. UUIDv3/v5 are deterministic legacy name-based formats, not collision-resistant cryptographic hashes. UUIDv8 uniqueness depends on supplied custom fields. Enforce uniqueness in persistent storage when collisions must be detected. Native PHP unserialization is for trusted data only; UUID values verify their internal fields when restored.

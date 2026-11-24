@@ -29,7 +29,8 @@ interface RfcUuidInterface extends UuidInterface
     /**
      * UUID version number.
      *
-     * The version is the 4-bit value stored in the UUID version field.
+     * The raw 4-bit value is interpreted as a version only for the RFC variant.
+     * Parsing Nil, Max and reserved variants does not assert an RFC version.
      *
      * For RFC 9562 UUIDs, known versions are:
      * 1 - time-based,
