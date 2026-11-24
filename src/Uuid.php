@@ -54,26 +54,22 @@ final class Uuid implements RfcUuidInterface, \JsonSerializable
      * Accepted format:
      * xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
      *
-     * Hexadecimal digits may be uppercase or lowercase.
+     * Hexadecimal digits may be uppercase, lowercase, or mixed case.
+     * Surrounding characters removed by PHP trim() are accepted for backwards
+     * compatibility. This parser is not a strict validator of the original text.
      */
     public static function fromString(string $uuid): self
     {
         $uuid = trim($uuid);
 
         if (!preg_match(self::PATTERN, $uuid)) {
-            throw new \InvalidArgumentException(sprintf(
-                'Invalid UUID string: "%s".',
-                $uuid,
-            ));
+            throw new \InvalidArgumentException('Invalid UUID string.');
         }
 
         $bytes = hex2bin(str_replace('-', '', $uuid));
 
         if ($bytes === false) {
-            throw new \InvalidArgumentException(sprintf(
-                'Invalid UUID hexadecimal payload: "%s".',
-                $uuid,
-            ));
+            throw new \InvalidArgumentException('Invalid UUID hexadecimal payload.');
         }
 
         return new self($bytes);

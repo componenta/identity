@@ -48,7 +48,7 @@ $uuid->version;    // 7
 $uuid->variant;    // UuidVariant::Rfc
 ```
 
-`Uuid::fromString()` accepts uppercase input and normalizes output to lowercase canonical form.
+`Uuid::fromString()` accepts upper-, lower-, and mixed-case hex digits and normalizes output to lowercase canonical form. For compatibility, surrounding characters removed by PHP `trim()` are accepted; validate the original input separately if a strict wire-format check is needed. Invalid input is not copied into exception messages.
 
 ## Equality
 

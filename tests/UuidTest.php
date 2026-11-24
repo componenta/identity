@@ -145,4 +145,27 @@ final class UuidTest extends TestCase
             }
         }
     }
+
+
+    public function testMalformedInputIsNotReflectedInTheExceptionMessage(): void
+    {
+        $payload = "confidential-value\r\n" . str_repeat('x', 100000);
+
+        try {
+            Uuid::fromString($payload);
+            self::fail('Invalid UUID accepted.');
+        } catch (\InvalidArgumentException $exception) {
+            self::assertLessThan(128, strlen($exception->getMessage()));
+            self::assertStringNotContainsString('confidential-value', $exception->getMessage());
+            self::assertStringNotContainsString("\r", $exception->getMessage());
+            self::assertStringNotContainsString("\n", $exception->getMessage());
+        }
+    }
+
+    public function testCanonicalizesMixedCaseAndPreservesExistingTrimBehavior(): void
+    {
+        $uuid = Uuid::fromString(" \t018F6d5D-3f7A-7a9B-8c2F-123456789aBc\r\n");
+
+        self::assertSame('018f6d5d-3f7a-7a9b-8c2f-123456789abc', $uuid->toString());
+    }
 }
