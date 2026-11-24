@@ -297,5 +297,83 @@ namespace {
     rejects(fn () => (new UuidFactory())->v1(), Random\RandomException::class);
     unset($GLOBALS['identityTestInt']);
 
+    // Rollover requires new counter entropy as well as a random tail.
+    // Both failures must leave the last successfully emitted prefix intact.
+    frozen(1645557742);
+    $GLOBALS['identityTestInt'] = 255;
+    $GLOBALS['identityTestBytes'] = str_repeat("\x11", 8);
+    $factory = new UuidFactory();
+    $counter = static fn ($uuid): int => unpack('n', substr(Uuid::fromString((string) $uuid)->bytes, 6, 2))[1] & 0x0fff;
+    for ($i = 255; $i <= 4095; ++$i) {
+        $id = $factory->v7();
+        verify(unixMs((string) $id) === 1645557742000 && $counter($id) === $i, 'Dedicated counter before rollover');
+    }
+    $GLOBALS['identityTestInt'] = $failure;
+    rejects(fn () => $factory->v7(), Random\RandomException::class);
+    $GLOBALS['identityTestInt'] = 17;
+    $GLOBALS['identityTestBytes'] = $failure;
+    rejects(fn () => $factory->v7(), Random\RandomException::class);
+    $GLOBALS['identityTestBytes'] = str_repeat("\x22", 8);
+    $id = $factory->v7();
+    verify(unixMs((string) $id) === 1645557742001 && $counter($id) === 17, 'Rollover recovery after both entropy failures');
+    frozen(1645557740);
+    $id = $factory->v7();
+    verify(unixMs((string) $id) === 1645557742001 && $counter($id) === 18, 'Rollback after rollover');
+    frozen(1645557743);
+    $id = $factory->v7();
+    verify(unixMs((string) $id) === 1645557743000 && $counter($id) === 17, 'Recovery to physical clock');
+    unset($GLOBALS['identityTestInt'], $GLOBALS['identityTestBytes']);
+
+    // Mixed-version generation, irregular physical time and failed entropy
+    // acquisition. Check the public timestamp fields against a simple model.
+    // V1 intentionally reuses its already initialized node/sequence, so it
+    // is not expected to request entropy on every call.
+    $factory = new UuidFactory();
+    $lastGregorian = null;
+    $lastV7 = null;
+    $seen = [];
+    $seconds = 1645557742;
+    $micros = 0;
+    mt_srand(12345);
+    for ($i = 0; $i < 20000; ++$i) {
+        $micros += mt_rand(-2, 2);
+        if ($micros < 0) {
+            --$seconds;
+            $micros += 1000000;
+        } elseif ($micros >= 1000000) {
+            ++$seconds;
+            $micros -= 1000000;
+        }
+        frozen($seconds, $micros);
+        $method = ['v1', 'v6', 'v7'][$i % 3];
+        if ($i % 19 === 2 && $method !== 'v1') {
+            $GLOBALS['identityTestBytes'] = $failure;
+            try {
+                $factory->$method();
+                throw new RuntimeException('Expected entropy failure');
+            } catch (Random\RandomException $caught) {
+                verify($caught === $failure, 'Mixed-version original entropy failure');
+            }
+            unset($GLOBALS['identityTestBytes']);
+        }
+        $uuid = Uuid::fromString((string) $factory->$method());
+        verify(!isset($seen[$uuid->bytes]), 'Duplicate in mixed-version trace');
+        $seen[$uuid->bytes] = true;
+        if ($method === 'v7') {
+            verify($lastV7 === null || strcmp($uuid->bytes, $lastV7) > 0, 'V7 ordering in mixed trace');
+            $lastV7 = $uuid->bytes;
+        } else {
+            $physical = $seconds * 10000000 + $micros * 10 + 0x01b21dd213814000;
+            $expected = $lastGregorian === null ? $physical : max($physical, $lastGregorian + 1);
+            $hex = bin2hex($uuid->bytes);
+            $timestampHex = $method === 'v1'
+                ? substr($hex, 13, 3) . substr($hex, 8, 4) . substr($hex, 0, 8)
+                : substr($hex, 0, 12) . substr($hex, 13, 3);
+            verify((int) hexdec($timestampHex) === $expected, 'Gregorian timestamp model');
+            $lastGregorian = $expected;
+        }
+    }
+    echo "Mixed-version clock model and rollover failure recovery passed (20000 successful generations).\n";
+
     echo "RFC vectors, copied state, fork, time limits, rollback, rollover and entropy checks passed.\n";
 }

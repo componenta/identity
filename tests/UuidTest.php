@@ -297,4 +297,25 @@ final class UuidTest extends TestCase
             }
         }
     }
+
+    public function testPublicRestorationMethodsCannotReplaceInitializedState(): void
+    {
+        $uuid = Uuid::fromString('018f6d5d-3f7a-7a9b-8c2f-123456789abc');
+        $replacement = Uuid::fromBytes(str_repeat("\0", 16));
+
+        try {
+            $uuid->__unserialize($replacement->__serialize());
+            self::fail('Initialized UUID was replaced.');
+        } catch (\Error) {
+            self::assertSame('018f6d5d-3f7a-7a9b-8c2f-123456789abc', $uuid->toString());
+        }
+
+        $factory = new \Componenta\Identity\UuidFactory(\Componenta\Identity\UuidGenerationVersion::V4);
+        try {
+            $factory->__unserialize(['defaultVersion' => \Componenta\Identity\UuidGenerationVersion::V7]);
+            self::fail('Initialized factory configuration was replaced.');
+        } catch (\Error) {
+            self::assertSame(4, Uuid::fromString($factory->generate()->toString())->version);
+        }
+    }
 }
