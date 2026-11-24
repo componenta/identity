@@ -39,7 +39,9 @@
         "check": [
             "@phpstan",
             "@test"
-        ]
+        ],
+        "test:negative": "@php tests/Quality/negative-controls.php",
+        "test:mutation": "@php vendor/bin/pest --configuration=phpunit.mutation.xml --mutate --everything --parallel --processes=4 --no-cache"
     },
     "config": {
         "sort-packages": true,

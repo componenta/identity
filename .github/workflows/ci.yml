@@ -40,6 +40,26 @@ jobs:
       - run: composer check
       - run: composer stress
 
+  quality:
+    name: Pest negative controls and mutation analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: '8.5'
+          extensions: pcntl
+          coverage: xdebug
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+      - run: composer test:negative
+      - run: composer test:mutation
+        env:
+          XDEBUG_MODE: coverage
+
   consumer:
     name: Production consumer with DI 6 (PHP ${{ matrix.php }})
     runs-on: ubuntu-latest

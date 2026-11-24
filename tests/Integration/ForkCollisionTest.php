@@ -29,7 +29,7 @@ function forkedUuidSamples(string $method, int $workers, int $perWorker): array
         $status = proc_close($process);
     }
 
-    expect($status, (string) $errors)->toBe(0)
+    expect($status)->toBe(0, (string) $errors)
         ->and($output)->toBeString()
         ->and(strlen($output))->toBe($workers * $perWorker * 16);
 
