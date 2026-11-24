@@ -1,118 +1,111 @@
 # Componenta Identity
 
-UUID value objects and generators for domain identities.
+[Русский](README.ru.md)
+
+Immutable UUID value objects, UUID generation, and domain identity contracts for PHP. Supports [RFC 9562](https://www.rfc-editor.org/rfc/rfc9562.html) UUID versions 1, 3, 4, 5, 6, 7 and 8, with UUIDv7 as the default generator.
 
 ## Installation
 
-```bash
+~~~bash
 composer require componenta/identity
-```
+~~~
 
-The package declares `Componenta\Identity\ConfigProvider` in `extra.componenta.config-providers`.
-When `componenta/composer-plugin` is installed, the provider is added to the generated provider list automatically.
+Requirements:
 
-## Requirements
+- PHP 8.4 or later within the 8.x series.
+- A 64-bit PHP runtime for UUID generation.
+- `componenta/config ^3.0`, installed automatically by Composer.
 
-- PHP 8.4+
-- 64-bit PHP runtime for `UuidFactory`
-- `componenta/config ^3.0` for the shipped `ConfigProvider`
+The package does not require Ramsey UUID.
 
-## Related Packages
+## Quick start
 
-| Package | Why it matters here |
-|---|---|
-| `componenta/policy` | Uses `IdentityInterface` for actors and owned resources. |
-| `componenta/cqrs` | `Operation` uses UUIDs as operation identifiers. |
-| `componenta/di` | Registers `UuidFactoryInterface` through `ConfigProvider`. |
-| `componenta/uuid` | Optional legacy Ramsey compatibility. Require it explicitly if your application still uses it; Identity no longer installs it. |
+~~~php
+use Componenta\Identity\Uuid;
+use Componenta\Identity\UuidFactory;
 
-## What It Provides
+$factory = new UuidFactory();
+$id = $factory->generate();
 
-- `UuidInterface`: minimal identity contract with string conversion and equality.
-- `RfcUuidInterface`: UUID contract with `bytes`, `version`, and `variant` properties.
-- `ComparableUuidInterface`: optional contract for ordering UUID values, returning `ComparisonResult`.
-- `Uuid`: immutable RFC UUID value object backed by 16 raw bytes.
-- `UuidFactoryInterface`: generation/from-bytes contract.
-- `UuidFactory`: UUID v1, v3, v4, v5, v6, v7, and v8 generator.
-- `UuidNamespace`: standard namespaces for name-based UUIDs.
+$restored = Uuid::fromString($id->toString());
+$restored->equals($id); // true
+~~~
 
-## UUID Value Object
+## Public API
 
-```php
+| Type | Purpose |
+| --- | --- |
+| `IdentityInterface` | Stable UUID-based identity of a domain entity. |
+| `UuidInterface` | Minimal UUID contract: canonical text and value equality. |
+| `RfcUuidInterface` | Extends the minimal contract with bytes, version and variant. |
+| `ComparableUuidInterface` | Extends the minimal contract with optional value ordering. |
+| `Uuid` | Immutable implementation of both extended UUID contracts; supports JSON serialization. |
+| `ComparisonResult` | Result of comparing two UUID values. |
+| `UuidFactoryInterface` | General contract for generating UUIDs and restoring them from bytes. |
+| `UuidFactory` | Built-in generator with explicit methods for each supported version. |
+| `UuidGenerationVersion` | Versions that can be generated without additional arguments. |
+| `UuidNamespace` | Four predefined namespaces for name-based UUIDs. |
+| `UuidVariant` | UUID bit-layout categories. |
+| `ConfigProvider` | Registers the standard factory for dependency injection. |
+
+## UUID values
+
+~~~php
 use Componenta\Identity\Uuid;
 
-$uuid = Uuid::fromString('018f6d5d-3f7a-7a9b-8c2f-123456789abc');
+$uuid = Uuid::fromString('018F6D5D-3F7A-7A9B-8C2F-123456789ABC');
 
 $uuid->toString(); // 018f6d5d-3f7a-7a9b-8c2f-123456789abc
-$uuid->bytes;      // 16-byte binary representation
+(string) $uuid;    // 018f6d5d-3f7a-7a9b-8c2f-123456789abc
 $uuid->version;    // 7
 $uuid->variant;    // UuidVariant::Rfc
-```
 
-`Uuid::fromString()` accepts upper-, lower-, and mixed-case hex digits and normalizes output to lowercase canonical form. For compatibility, surrounding characters removed by PHP `trim()` are accepted; validate the original input separately if a strict wire-format check is needed. Invalid input is not copied into exception messages. Parsing and native restoration inputs are marked with PHP's `SensitiveParameter` so their argument values are redacted in the library's exception trace frames, even when PHP records arguments. This does not redact caller frames, application logs, or values explicitly extracted from `SensitiveParameterValue`; configure `zend.exception_ignore_args=1` in production and do not deserialize untrusted data.
+$copy = Uuid::fromBytes($uuid->bytes);
+$uuid->equals($copy); // true
+~~~
 
-## Equality
+`Uuid::fromString(string $uuid): Uuid` accepts the 8-4-4-4-12 hexadecimal representation, in either case or mixed case. Output is always lowercase. Leading and trailing characters removed by PHP's `trim()` are accepted for compatibility; validate the original text separately if an exact wire format is required. URNs, braces and strings without hyphens are not accepted.
 
-```php
-$left = Uuid::fromString($id);
-$right = Uuid::fromBytes($left->bytes);
+`Uuid::fromBytes(string $bytes): Uuid` accepts exactly 16 bytes in network (big-endian) byte order. Invalid text or an invalid byte length throws `InvalidArgumentException`.
 
-$left->equals($right); // true
-```
+`UuidInterface` extends PHP's `Stringable` and exposes `toString(): string` and `equals(UuidInterface $other): bool`. Equality is based on the UUID value, not PHP object identity.
 
-Domain code should usually depend on `UuidInterface`. Infrastructure that needs raw bytes or version inspection can depend on `RfcUuidInterface`.
+`RfcUuidInterface` adds three read-only properties:
 
-## UUID Factory
+| Property | Type | Meaning |
+| --- | --- | --- |
+| `bytes` | `string` | Exactly 16 bytes in network byte order. |
+| `version` | `int` | Raw four-bit field (0–15); interpreted as a UUID version only for the RFC variant. |
+| `variant` | `UuidVariant` | `Ncs` (0), `Rfc` (1), `Microsoft` (2), or `Future` (3). |
 
-```php
+The parser preserves every 128-bit pattern, including Nil, Max and reserved versions or variants. Parsing a value does not verify that it was generated by a supported RFC algorithm.
+
+Use `UuidInterface` in domain code unless the extra RFC fields are needed.
+
+## Domain identity
+
+`IdentityInterface` exposes the entity's stable identifier through a readable `UuidInterface $uuid` property. An entity may use the built-in UUID or its own implementation of the minimal contract. Persistence is not required to assign the identity.
+
+~~~php
+use Componenta\Identity\IdentityInterface;
 use Componenta\Identity\UuidFactory;
-use Componenta\Identity\UuidGenerationVersion;
-use Componenta\Identity\UuidNamespace;
+use Componenta\Identity\UuidInterface;
 
-$factory = new UuidFactory(UuidGenerationVersion::V7);
+final readonly class Order implements IdentityInterface
+{
+    public function __construct(public UuidInterface $uuid) {}
+}
 
-$id = $factory->generate();              // default version
-$random = $factory->v4();                // random UUID
-$ordered = $factory->v7();               // Unix timestamp UUID
-$nameBased = $factory->v5(UuidNamespace::Dns, 'example.com');
-```
-
-Name-based UUIDs are deterministic for the same namespace and name.
-
-## DI Registration
-
-`ConfigProvider` registers `UuidFactoryInterface` as a factory returning `UuidFactory`.
-
-## Generation, security and uniqueness
-
-UUIDv7 uses a randomly seeded 12-bit counter and fresh 62-bit cryptographically random data for every generated value (RFC 9562 §§ 5.7 and 6.2, method 1). The same factory preserves ordering through a repeated or decreasing millisecond; counter exhaustion advances its logical timestamp. Consequently, an embedded timestamp may be ahead of the wall clock. Out-of-range timestamps fail with `OverflowException` instead of wrapping. UUIDv1 uses a random multicast node and a randomly initialized clock sequence; a physical clock rollback advances the sequence, and copying a factory or forking the process initializes independent state. UUIDv6 refreshes its 14-bit sequence and random multicast node for each UUID (RFC 9562 § 5.6). Neither version consumes a logical timestamp on an entropy failure. A serialized factory preserves its configured default version, not a replayable generator state; old native factory snapshots can be restored as new generators.
-
-Neither ordering across independent factories/processes nor absolute global uniqueness is guaranteed. Do not use UUIDs as bearer credentials or authorization checks. Prefer UUIDv4 if random identifiers are needed; use independent cryptographic tokens for secrets. UUIDv3/v5 are deterministic legacy name-based formats, not collision-resistant cryptographic hashes. UUIDv8 uniqueness depends on supplied custom fields. Enforce uniqueness in persistent storage when collisions must be detected. Native PHP unserialization is for trusted data only; UUID values validate their internal fields and reconstruct them by value when restored, preserving the legacy wire format without retaining references from the serialized graph.
-
-### Choosing a UUID version
-
-Use UUIDv7 for new time-ordered identifiers and UUIDv4 when creation time/order should not be exposed. RFC 9562 § 8 recommends UUIDv4 where UUIDs are required in a security-sensitive operation; access must still be authorized independently. Parsing a UUID does not authenticate it or detect tampering. Prefer UUIDv5 to UUIDv3 for legacy name-based compatibility; neither is suitable for adversarial collision resistance. If a protocol requires stronger name hashing, it needs a separately specified UUIDv8 scheme, not a changed UUIDv5 algorithm.
-
-The default generator uses PHP's OS-backed `random_bytes()` and `random_int()`. Entropy failures propagate; there is no weaker random fallback. UUIDv4 has 122 random bits, UUIDv6 refreshes 61 random bits (sequence and node), and UUIDv7 refreshes 62 random bits for each fixed timestamp/counter prefix. UUIDv1 uses a randomly initialized per-generator node/sequence, which can correlate UUIDs from the same generator. The probability of a collision depends on the version, distribution of prefixes, number of independent generators and operating-system entropy. The generator is not reentrant or thread-safe; use separate instances or synchronize shared access. It does not coordinate with other processes or persist generator state.
-
-Treat UUIDs as opaque identifiers. The timestamp in a time-based UUID is not an authoritative audit timestamp. Store the 16-byte representation in database-native UUID or binary columns where appropriate, with a unique constraint when duplicates must be detected. `Uuid::fromBytes()` and `Uuid::fromString()` represent all valid 128-bit layouts, including Nil, Max and reserved variants; accepting their representation is not an assertion that they were generated by a supported RFC algorithm. The four predefined namespace values are the RFC 9562 namespaces; arbitrary registered or private namespaces can also be supplied as UUID objects. For new private namespaces, generate a UUIDv4 or UUIDv7 instead of extending the IANA allocation sequence (RFC 9562 § 6.6). Do not use the reserved 6ba7b813-9dad-11d1-80b4-00c04fd430c8 value for a new namespace.
-
-## Development checks
-
-- `composer check` runs PHPStan and the Pest 4 unit and deterministic contract suites.
-- `composer stress` runs the collision and monotonicity samples, including actual forked processes when PCNTL is available.
-- `composer test:negative` verifies targeted RED/GREEN controls in isolated copies of the source. Requires PCNTL.
-- `XDEBUG_MODE=coverage composer test:mutation` runs the mutation diagnostics with Xdebug. Workers verify source replacement and report actual test execution; assertion failures, test errors, survivors, uncovered and unverified outcomes are reported separately. The raw Pest score is not a verified coverage guarantee.
-
-Controlled clock and entropy functions are loaded only through the dedicated test configurations and fixtures, never by the production autoloader. Fork cases are explicitly skipped on Windows. See the [audit report](docs/audits/2026-11-25-identity-pest.md) for the reviewed scenarios and limitations.
+$order = new Order((new UuidFactory())->generate());
+$order->uuid->toString();
+~~~
 
 ## Ordering UUID values
 
-`ComparableUuidInterface` is an optional extension of the minimal UUID contract. The built-in `Uuid` implements it; neither `UuidInterface` nor `RfcUuidInterface` requires ordering from existing consumer implementations.
+`ComparableUuidInterface` adds `compareTo(UuidInterface $other): ComparisonResult`. It is implemented by `Uuid`, but is not required by `UuidInterface` or `RfcUuidInterface`.
 
 ~~~php
 use Componenta\Identity\ComparableUuidInterface;
-use Componenta\Identity\ComparisonResult;
 use Componenta\Identity\Uuid;
 use Componenta\Identity\UuidInterface;
 
@@ -124,7 +117,174 @@ $right->compareTo($left); // ComparisonResult::Greater
 $left->compareTo($left);  // ComparisonResult::Equal
 
 $values = [$right, $left];
-usort($values, static fn (ComparableUuidInterface $a, UuidInterface $b): int => $a->compareTo($b)->value);
+usort(
+    $values,
+    static fn (ComparableUuidInterface $a, UuidInterface $b): int =>
+        $a->compareTo($b)->value,
+);
 ~~~
 
-The result enum has stable integer backing values: Less = -1, Equal = 0, Greater = 1. Ordering is lexicographic over the 16 network-order bytes (RFC 9562 § 6.11), equivalently unsigned 128-bit ordering. Operands may use any valid UUID implementation; the RFC interface supplies bytes, while the minimal contract supplies canonical text. Equality of ordering is consistent with `equals()` for conforming UUID values. No timestamp extraction, version/variant restriction, numeric string coercion, or change to native serialization is involved. This order is not a guarantee of chronological creation order, especially for mixed versions, UUIDv1 or independent UUID generators. The minimal factory interface still returns `UuidInterface`; if an application has only that type, check `instanceof ComparableUuidInterface` before requesting ordering. UUID ordering is not a security or authorization operation.
+| Result | Backing value | Meaning |
+| --- | ---: | --- |
+| `ComparisonResult::Less` | -1 | The left UUID is smaller. |
+| `ComparisonResult::Equal` | 0 | Both represent the same value. |
+| `ComparisonResult::Greater` | 1 | The left UUID is greater. |
+
+Comparison uses the unsigned 128-bit value in network byte order, consistent with [RFC 9562 ` 6.11](https://www.rfc-editor.org/rfc/rfc9562.html#section-6.11). Any conforming `UuidInterface` can be the right operand. Ordering includes version and variant bits and is consistent with `equals()`.
+
+The order is not necessarily chronological (especially for UUIDv1, mixed versions or independent generators). When receiving a UUID from an arbitrary factory or implementation, check `instanceof ComparableUuidInterface` before calling `compareTo()`. The sorting example requires every array element to implement that optional contract.
+
+## UUID factory
+
+`UuidFactoryInterface` defines `generate(): UuidInterface` and `fromBytes(string $bytes): RfcUuidInterface`. Depend on this interface when the generation algorithm is an application configuration rather than a domain requirement.
+
+The standard `UuidFactory` returns `Uuid` instances, including for `generate()` and `fromBytes()`. The constructor accepts `UuidGenerationVersion::V1`, `V4`, `V6` or `V7` (the default).
+
+~~~php
+use Componenta\Identity\UuidFactory;
+use Componenta\Identity\UuidGenerationVersion;
+
+$factory = new UuidFactory(UuidGenerationVersion::V4);
+
+$random = $factory->generate();
+$ordered = $factory->v7();
+$restored = $factory->fromBytes(hex2bin('6ba7b8109dad11d180b400c04fd430c8'));
+~~~
+
+### Available versions
+
+All explicit generation methods return `UuidInterface`.
+
+| Method | Version | Use |
+| --- | --- | --- |
+| `v1()` | 1 | Gregorian time-based UUID for legacy compatibility. |
+| `v3(UuidNamespace\|UuidInterface $namespace, string $name)` | 3 | Deterministic MD5 name-based UUID for legacy interoperability. |
+| `v4()` | 4 | Random UUID with 122 random bits. |
+| `v5(UuidNamespace\|UuidInterface $namespace, string $name)` | 5 | Deterministic SHA-1 name-based UUID. |
+| `v6()` | 6 | Reordered Gregorian time-based UUID for sortable storage and compatibility. |
+| `v7()` | 7 | Unix millisecond time-based UUID; recommended for new sortable identifiers. |
+| `v8(string $customA, int $customB, string $customC)` | 8 | Application-defined layout. |
+
+UUIDv2 generation is not provided; its DCE Security layout is outside the scope of RFC 9562.
+
+### Name-based UUIDs
+
+`UuidNamespace` is a string-backed enum: `Dns`, `Url`, `Oid`, `X500`. Its `value` is the canonical namespace UUID; `toUuid()` returns a `Uuid` and `getBytes()` returns its 16 network-order bytes. Other namespaces can be passed as any conforming `UuidInterface`.
+
+~~~php
+use Componenta\Identity\Uuid;
+use Componenta\Identity\UuidFactory;
+use Componenta\Identity\UuidNamespace;
+
+$factory = new UuidFactory();
+
+$dns = UuidNamespace::Dns;
+$dns->toUuid();
+$dns->getBytes();
+
+$legacy = $factory->v3($dns, 'www.example.com');
+$named = $factory->v5($dns, 'www.example.com');
+
+$privateNamespace = Uuid::fromString('c63c06d8-9c3e-4d1a-b002-2cb47a9e1375');
+$privateId = $factory->v5($privateNamespace, 'example');
+~~~
+
+For a given version, the same namespace and the same name bytes always produce the same UUID. Names are hashed as supplied, without case folding, Unicode normalization or URL/DNS canonicalization; perform any required normalization before the call.
+
+Generate a UUIDv4 or UUIDv7 for a new private namespace instead of extending the IANA allocation sequence ([RFC 9562 ` 6.6](https://www.rfc-editor.org/rfc/rfc9562.html#section-6.6)). Do not use the reserved value `6ba7b813-9dad-11d1-80b4-00c04fd430c8`.
+
+### Custom UUIDv8
+
+Provide the three custom fields in network byte order:
+
+| Argument | Valid input |
+| --- | --- |
+| `$customA` | 6 bytes (48 bits). |
+| `$customB` | Integer from 0 to 4095 (12 bits). |
+| `$customC` | 8 bytes; the two most significant bits of the first byte are replaced with the RFC variant, leaving 62 custom bits. |
+
+~~~php
+use Componenta\Identity\UuidFactory;
+
+$uuid = (new UuidFactory())->v8(
+    "\x01\x02\x03\x04\x05\x06",
+    0xABC,
+    "\xFF\xEE\xDD\xCC\xBB\xAA\x99\x88",
+);
+
+$uuid->toString(); // 01020304-0506-8abc-bfee-ddccbbaa9988
+~~~
+
+The factory sets the version and variant bits. Incorrect field sizes or an out-of-range integer throw `InvalidArgumentException`. The caller is responsible for the custom layout and its uniqueness properties.
+
+## Time-based generation and uniqueness
+
+UUIDv7 has a 48-bit millisecond timestamp, a randomly initialized 12-bit counter, and a fresh 62-bit cryptographically random tail. Within a single factory, repeated or decreasing wall-clock readings advance the counter; counter exhaustion advances the logical timestamp. UUIDv6 uses a reordered 60-bit Gregorian timestamp and fresh random sequence and multicast node fields. UUIDv1 uses a random multicast node and a random initial clock sequence that changes on physical clock rollback.
+
+The factory keeps logical Gregorian timestamps increasing across its v1/v6 calls. This does not make the raw UUIDv1 layout chronologically sortable. A v1 generator refreshes its node and clock sequence after cloning or a change of process. Cloning is not a guarantee of global order or a complete reset of logical time. Serialization of a factory preserves its configured default version only; restoration creates fresh generator state.
+
+Out-of-range or exhausted timestamps throw `OverflowException`. Failures obtaining cryptographic randomness propagate without a weaker fallback. A failed entropy request does not consume a successful generation's next logical timestamp or counter.
+
+A factory must not be used concurrently or re-entered without external synchronization. Independent factories and processes do not coordinate their state; neither global ordering nor absolute uniqueness is guaranteed. Use database-native UUID or binary storage with a unique constraint wherever duplicate identifiers must be rejected.
+
+## Serialization and security
+
+The built-in `Uuid` supports canonical string JSON serialization:
+
+~~~php
+use Componenta\Identity\Uuid;
+
+$uuid = Uuid::fromString('018f6d5d-3f7a-7a9b-8c2f-123456789abc');
+
+$json = json_encode($uuid, JSON_THROW_ON_ERROR);
+$uuid->equals(Uuid::fromString(json_decode($json, true, flags: JSON_THROW_ON_ERROR))); // true
+~~~
+
+PHP native serialization of UUIDs preserves their values and validates consistency on restoration. Only deserialize trusted native PHP data.
+
+Treat UUIDs as opaque identifiers, not secrets, proof of authenticity, or access credentials. Authorize access independently. Prefer UUIDv4 when exposing creation time/order is undesirable or UUIDs are used in a security-sensitive operation. UUIDv1 can correlate values from the same generator; UUIDv6 and UUIDv7 expose time information. Embedded timestamps are not authoritative audit timestamps.
+
+UUIDv3 and UUIDv5 use MD5 and SHA-1 as specified by the RFC; neither is suitable for adversarial collision resistance. UUIDv8 security depends on the application-defined scheme. For secret tokens, use an independent cryptographically secure token generator.
+
+Invalid parser inputs are not echoed in exception messages. Sensitive parsing and restoration arguments are redacted in the library's exception trace frames; this does not protect caller frames or application logs. Set `zend.exception_ignore_args=1` in production.
+
+See [RFC 9562 ` 8](https://www.rfc-editor.org/rfc/rfc9562.html#section-8) for security considerations.
+
+## Dependency injection
+
+`ConfigProvider` registers `UuidFactoryInterface` with the standard UUIDv7 factory. The package declares the provider in `extra.componenta.config-providers` in its Composer manifest; applications using `componenta/composer-plugin` can discover it automatically.
+
+Inject the interface into services rather than constructing a generator for every identifier:
+
+~~~php
+use Componenta\Identity\UuidFactoryInterface;
+use Componenta\Identity\UuidInterface;
+
+final readonly class OrderIdGenerator
+{
+    public function __construct(private UuidFactoryInterface $factory) {}
+
+    public function generate(): UuidInterface
+    {
+        return $this->factory->generate();
+    }
+}
+~~~
+
+Applications can replace the factory with a different configured `UuidFactory` or a custom implementation of `UuidFactoryInterface`.
+
+## Development
+
+~~~bash
+composer install
+composer check
+composer stress
+~~~
+
+`composer check` runs PHPStan and the regular and controlled Pest suites. `composer stress` runs collision and ordering samples, including fork tests when PCNTL is available. These samples are not proof of global uniqueness.
+
+For additional test diagnostics, run `composer test:negative` on a system with PCNTL or `XDEBUG_MODE=coverage composer test:mutation` with Xdebug enabled for coverage.
+
+## License
+
+MIT, as declared in [composer.json](composer.json).
