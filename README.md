@@ -275,6 +275,8 @@ Applications can replace the factory with a different configured `UuidFactory` o
 
 ## Development
 
+Use a Git checkout for development. Distribution archives omit tests and CI configuration.
+
 ~~~bash
 composer install
 composer check

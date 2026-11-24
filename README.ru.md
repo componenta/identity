@@ -275,6 +275,8 @@ final readonly class OrderIdGenerator
 
 ## Разработка
 
+Для разработки используйте репозиторий, клонированный через Git. Архивы поставки не содержат тестов и конфигурации CI.
+
 ~~~bash
 composer install
 composer check
