@@ -130,7 +130,7 @@ usort(
 | `ComparisonResult::Equal` | 0 | Both represent the same value. |
 | `ComparisonResult::Greater` | 1 | The left UUID is greater. |
 
-Comparison uses the unsigned 128-bit value in network byte order, consistent with [RFC 9562 ` 6.11](https://www.rfc-editor.org/rfc/rfc9562.html#section-6.11). Any conforming `UuidInterface` can be the right operand. Ordering includes version and variant bits and is consistent with `equals()`.
+Comparison uses the unsigned 128-bit value in network byte order, consistent with [RFC 9562 § 6.11](https://www.rfc-editor.org/rfc/rfc9562.html#section-6.11). Any conforming `UuidInterface` can be the right operand. Ordering includes version and variant bits and is consistent with `equals()`.
 
 The order is not necessarily chronological (especially for UUIDv1, mixed versions or independent generators). When receiving a UUID from an arbitrary factory or implementation, check `instanceof ComparableUuidInterface` before calling `compareTo()`. The sorting example requires every array element to implement that optional contract.
 
@@ -191,7 +191,7 @@ $privateId = $factory->v5($privateNamespace, 'example');
 
 For a given version, the same namespace and the same name bytes always produce the same UUID. Names are hashed as supplied, without case folding, Unicode normalization or URL/DNS canonicalization; perform any required normalization before the call.
 
-Generate a UUIDv4 or UUIDv7 for a new private namespace instead of extending the IANA allocation sequence ([RFC 9562 ` 6.6](https://www.rfc-editor.org/rfc/rfc9562.html#section-6.6)). Do not use the reserved value `6ba7b813-9dad-11d1-80b4-00c04fd430c8`.
+Generate a UUIDv4 or UUIDv7 for a new private namespace instead of extending the IANA allocation sequence ([RFC 9562 § 6.6](https://www.rfc-editor.org/rfc/rfc9562.html#section-6.6)). Do not use the reserved value `6ba7b813-9dad-11d1-80b4-00c04fd430c8`.
 
 ### Custom UUIDv8
 
@@ -248,7 +248,7 @@ UUIDv3 and UUIDv5 use MD5 and SHA-1 as specified by the RFC; neither is suitable
 
 Invalid parser inputs are not echoed in exception messages. Sensitive parsing and restoration arguments are redacted in the library's exception trace frames; this does not protect caller frames or application logs. Set `zend.exception_ignore_args=1` in production.
 
-See [RFC 9562 ` 8](https://www.rfc-editor.org/rfc/rfc9562.html#section-8) for security considerations.
+See [RFC 9562 § 8](https://www.rfc-editor.org/rfc/rfc9562.html#section-8) for security considerations.
 
 ## Dependency injection
 
