@@ -46,16 +46,17 @@ final class UuidFactory implements UuidFactoryInterface
     private const int V7_SEQUENCE_SEED_MAX = 0x00FF;
 
     /**
-     * Maximum value of the UUIDv7 62-bit rand_b field.
+     * Maximum values of the RFC timestamp fields.
      */
-    private const int V7_RAND_B_MAX = 0x3FFFFFFFFFFFFFFF;
+    private const int V7_TIMESTAMP_MAX = 0xFFFFFFFFFFFF;
+    private const int GREGORIAN_TIMESTAMP_MAX = 0x0FFFFFFFFFFFFFFF;
 
     /**
      * Last Gregorian timestamp used by v1/v6 generators.
      *
      * Stored in 100-nanosecond intervals since 15 October 1582 UTC.
      */
-    private int $lastGregorianTicks = 0;
+    private ?int $lastGregorianTicks = null;
 
     /**
      * Stable random node ID for v1/v6.
@@ -73,7 +74,7 @@ final class UuidFactory implements UuidFactoryInterface
     /**
      * Last timestamp seen by v7 generator, in milliseconds.
      */
-    private int $v7LastMs = 0;
+    private ?int $v7LastMs = null;
 
     /**
      * Monotonic counter for v7 sequencing within the same millisecond.
@@ -82,12 +83,8 @@ final class UuidFactory implements UuidFactoryInterface
      */
     private int $v7Seq = 0;
 
-    /**
-     * Monotonic random payload for UUIDv7 rand_b.
-     *
-     * Stored as a 62-bit unsigned value inside a signed 64-bit PHP integer.
-     */
-    private int $v7RandB = 0;
+    /** Process that owns the cached v1/v6 node and clock sequence. */
+    private ?int $processId = null;
 
     /**
      * @throws \RuntimeException If PHP is not running on a 64-bit platform.
@@ -98,6 +95,35 @@ final class UuidFactory implements UuidFactoryInterface
         if (PHP_INT_SIZE < 8) {
             throw new \RuntimeException('UuidFactory requires 64-bit PHP.');
         }
+    }
+
+    /** A copied generator must not reuse the original node/clock sequence. */
+    public function __clone(): void
+    {
+        $this->processId = null;
+        $this->node = null;
+        $this->clockSeq = null;
+    }
+
+    /** @return array{defaultVersion: UuidGenerationVersion} */
+    public function __serialize(): array
+    {
+        // A restored factory is a new generator, not a replay of live state.
+        return ['defaultVersion' => $this->defaultVersion];
+    }
+
+    /** @param array<array-key, mixed> $data */
+    public function __unserialize(array $data): void
+    {
+        $version = $data['defaultVersion']
+            ?? $data["\0" . self::class . "\0defaultVersion"]
+            ?? null;
+
+        if (!$version instanceof UuidGenerationVersion) {
+            throw new \InvalidArgumentException('Invalid serialized UUID factory version.');
+        }
+
+        $this->__construct($version);
     }
 
     /**
@@ -135,6 +161,7 @@ final class UuidFactory implements UuidFactoryInterface
      */
     public function v1(): UuidInterface
     {
+        $this->ensureProcessState();
         $ticks = $this->monotonicGregorianTicks();
 
         $timeLow  = $ticks & 0xFFFFFFFF;
@@ -229,6 +256,7 @@ final class UuidFactory implements UuidFactoryInterface
      */
     public function v6(): UuidInterface
     {
+        $this->ensureProcessState();
         $ticks = $this->monotonicGregorianTicks();
 
         $timeHigh = ($ticks >> 12) & 0xFFFFFFFFFFFF;
@@ -250,12 +278,9 @@ final class UuidFactory implements UuidFactoryInterface
      * Generates a UUIDv7, Unix timestamp-based.
      *
      * Recommended for new systems. Provides millisecond-precision timestamps
-     * with in-process monotonic sequencing, followed by a monotonic 62-bit
-     * rand_b payload for stable ordering within the same millisecond.
-     *
-     * For every fresh real or synthetic millisecond:
-     * - seq/rand_a is seeded with 8 random bits, then incremented;
-     * - rand_b is seeded with 62 random bits, then incremented.
+     * with a dedicated 12-bit counter (RFC 9562 section 6.2, method 1).
+     * Each new real or synthetic millisecond starts with an 8-bit random
+     * counter seed. Every UUID independently obtains 62 random rand_b bits.
      *
      * Layout:
      * unix_ts_ms (48) | version (4) | seq/rand_a (12)
@@ -266,18 +291,34 @@ final class UuidFactory implements UuidFactoryInterface
     public function v7(): UuidInterface
     {
         $currentMs = $this->currentMs();
+        $lastMs = $this->v7LastMs;
 
-        if ($currentMs > $this->v7LastMs) {
-            $this->resetV7State($currentMs);
+        if ($lastMs === null || $currentMs > $lastMs) {
+            $ms = $currentMs;
+            $seq = random_int(0, self::V7_SEQUENCE_SEED_MAX);
+        } elseif ($this->v7Seq === self::V7_SEQUENCE_MAX) {
+            if ($lastMs === self::V7_TIMESTAMP_MAX) {
+                throw new \OverflowException('UUIDv7 timestamp exhausted.');
+            }
+            $ms = $lastMs + 1;
+            $seq = random_int(0, self::V7_SEQUENCE_SEED_MAX);
         } else {
-            $this->advanceV7State();
+            $ms = $lastMs;
+            $seq = $this->v7Seq + 1;
         }
 
-        $bytes = $this->packUint48($this->v7LastMs)
-            . pack('n', 0x7000 | $this->v7Seq)
-            . $this->packV7RandBWithVariant($this->v7RandB);
+        // A copied/forked counter is not a copied random stream. Never
+        // generate predictable tails or publish state after failed entropy.
+        $randB = random_bytes(8);
+        $randB[0] = chr((ord($randB[0]) & 0x3F) | 0x80);
+        $uuid = Uuid::fromBytes($this->packUint48($ms)
+            . pack('n', 0x7000 | $seq)
+            . $randB);
 
-        return Uuid::fromBytes($bytes);
+        $this->v7LastMs = $ms;
+        $this->v7Seq = $seq;
+
+        return $uuid;
     }
 
     /**
@@ -324,7 +365,17 @@ final class UuidFactory implements UuidFactoryInterface
     {
         $time = gettimeofday();
 
-        return ($time['sec'] * 1000) + intdiv($time['usec'], 1000);
+        $seconds = $time['sec'];
+        if ($seconds < 0 || $seconds > intdiv(self::V7_TIMESTAMP_MAX, 1000)) {
+            throw new \OverflowException('Unix time does not fit the UUIDv7 timestamp.');
+        }
+
+        $ms = ($seconds * 1000) + intdiv($time['usec'], 1000);
+        if ($ms > self::V7_TIMESTAMP_MAX) {
+            throw new \OverflowException('Unix time does not fit the UUIDv7 timestamp.');
+        }
+
+        return $ms;
     }
 
     /**
@@ -335,9 +386,20 @@ final class UuidFactory implements UuidFactoryInterface
     {
         $time = gettimeofday();
 
-        return ($time['sec'] * 10_000_000)
+        $seconds = $time['sec'];
+        if ($seconds < -intdiv(self::GREGORIAN_TO_UNIX_OFFSET, 10_000_000)
+            || $seconds > intdiv(self::GREGORIAN_TIMESTAMP_MAX - self::GREGORIAN_TO_UNIX_OFFSET, 10_000_000)) {
+            throw new \OverflowException('Gregorian time does not fit the UUID timestamp.');
+        }
+
+        $ticks = ($seconds * 10_000_000)
             + ($time['usec'] * 10)
             + self::GREGORIAN_TO_UNIX_OFFSET;
+        if ($ticks > self::GREGORIAN_TIMESTAMP_MAX) {
+            throw new \OverflowException('Gregorian time does not fit the UUID timestamp.');
+        }
+
+        return $ticks;
     }
 
     /**
@@ -347,7 +409,10 @@ final class UuidFactory implements UuidFactoryInterface
     {
         $ticks = $this->gregorianTicks();
 
-        if ($ticks <= $this->lastGregorianTicks) {
+        if ($this->lastGregorianTicks !== null && $ticks <= $this->lastGregorianTicks) {
+            if ($this->lastGregorianTicks === self::GREGORIAN_TIMESTAMP_MAX) {
+                throw new \OverflowException('Gregorian UUID timestamp exhausted.');
+            }
             $ticks = $this->lastGregorianTicks + 1;
         }
 
@@ -379,75 +444,19 @@ final class UuidFactory implements UuidFactoryInterface
         return $this->clockSeq ??= random_int(0, 0x3FFF);
     }
 
-    /**
-     * Resets UUIDv7 state for a fresh real or synthetic millisecond.
-     */
-    private function resetV7State(int $ms): void
+    /** Do not share cached node/sequence state across process forks. */
+    private function ensureProcessState(): void
     {
-        $this->v7LastMs = $ms;
-        $this->v7Seq = random_int(0, self::V7_SEQUENCE_SEED_MAX);
-        $this->v7RandB = $this->randomV7RandB();
-    }
-
-    /**
-     * Advances UUIDv7 monotonic state within the current millisecond bucket.
-     */
-    private function advanceV7State(): void
-    {
-        ++$this->v7Seq;
-
-        if ($this->v7Seq > self::V7_SEQUENCE_MAX) {
-            $this->resetV7State($this->v7LastMs + 1);
-
-            return;
+        $pid = getmypid();
+        if ($pid === false) {
+            throw new \RuntimeException('Unable to determine UUID generator process.');
         }
 
-        if ($this->v7RandB >= self::V7_RAND_B_MAX) {
-            $this->resetV7State($this->v7LastMs + 1);
-
-            return;
+        if ($this->processId !== $pid) {
+            $this->node = null;
+            $this->clockSeq = null;
+            $this->processId = $pid;
         }
-
-        ++$this->v7RandB;
-    }
-
-    /**
-     * Returns a random 62-bit integer for UUIDv7 rand_b.
-     */
-    private function randomV7RandB(): int
-    {
-        $bytes = random_bytes(8);
-        $bytes[0] = chr(ord($bytes[0]) & 0x3F);
-
-        $parts = unpack('Nhigh/Nlow', $bytes);
-
-        if (
-            $parts === false
-            || !is_int($parts['high'])
-            || !is_int($parts['low'])
-        ) {
-            throw new \RuntimeException('Failed to unpack random UUIDv7 payload.');
-        }
-
-        return ($parts['high'] << 32) | $parts['low'];
-    }
-
-    /**
-     * Packs the 62-bit UUIDv7 rand_b field with RFC variant bits.
-     */
-    private function packV7RandBWithVariant(int $randB): string
-    {
-        if ($randB < 0 || $randB > self::V7_RAND_B_MAX) {
-            throw new \InvalidArgumentException('UUIDv7 rand_b must fit in 62 bits.');
-        }
-
-        $high = ($randB >> 32) & 0x3FFFFFFF;
-        $low  = $randB & 0xFFFFFFFF;
-
-        $bytes = pack('NN', $high, $low);
-        $bytes[0] = chr(ord($bytes[0]) | 0x80);
-
-        return $bytes;
     }
 
     /**

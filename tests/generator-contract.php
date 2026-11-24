@@ -1,0 +1,209 @@
+<?php
+
+declare(strict_types=1);
+
+// Run in a standalone PHP process; never include these clock fixtures in an
+// application or in the normal PHPUnit process.
+namespace Componenta\Identity {
+    function gettimeofday(): array
+    {
+        return $GLOBALS['identityTestTime'] ?? \gettimeofday();
+    }
+
+    function random_int(int $min, int $max): int
+    {
+        $fixture = $GLOBALS['identityTestInt'] ?? null;
+        if ($fixture instanceof \Throwable) {
+            throw $fixture;
+        }
+        if ($fixture !== null) {
+            if ($fixture < $min || $fixture > $max) {
+                throw new \RuntimeException('Entropy fixture outside requested range.');
+            }
+            return $fixture;
+        }
+        return \random_int($min, $max);
+    }
+
+    function random_bytes(int $length): string
+    {
+        $fixture = $GLOBALS['identityTestBytes'] ?? null;
+        if ($fixture instanceof \Throwable) {
+            throw $fixture;
+        }
+        if ($fixture !== null) {
+            if (strlen($fixture) !== $length) {
+                throw new \RuntimeException('Unexpected entropy fixture length.');
+            }
+            return $fixture;
+        }
+        return \random_bytes($length);
+    }
+}
+
+namespace {
+    use Componenta\Identity\Uuid;
+    use Componenta\Identity\UuidFactory;
+    use Componenta\Identity\UuidGenerationVersion;
+    use Componenta\Identity\UuidNamespace;
+
+    require dirname(__DIR__) . '/vendor/autoload.php';
+
+    function verify(bool $condition, string $message): void
+    {
+        if (!$condition) {
+            throw new RuntimeException($message);
+        }
+    }
+
+    function rejects(callable $call, string $class): void
+    {
+        try {
+            $call();
+        } catch (Throwable $failure) {
+            verify($failure instanceof $class, 'Unexpected exception: ' . $failure::class);
+            return;
+        }
+        throw new RuntimeException('Expected ' . $class);
+    }
+
+    function frozen(int $seconds, int $microseconds = 0): void
+    {
+        $GLOBALS['identityTestTime'] = ['sec' => $seconds, 'usec' => $microseconds];
+    }
+
+    function unixMs(string $uuid): int
+    {
+        return (int) hexdec(substr(str_replace('-', '', $uuid), 0, 12));
+    }
+
+    frozen(1645557742);
+    $GLOBALS['identityTestInt'] = 0x33C8;
+    $GLOBALS['identityTestBytes'] = hex2bin('9e6bdeced846');
+    verify((string) (new UuidFactory())->v1() === 'c232ab00-9414-11ec-b3c8-9f6bdeced846', 'RFC A.1');
+    verify((string) (new UuidFactory())->v6() === '1ec9414c-232a-6b00-b3c8-9f6bdeced846', 'RFC A.5');
+    unset($GLOBALS['identityTestInt']);
+    $GLOBALS['identityTestBytes'] = hex2bin('919108f752d133205bacf847db4148a8');
+    verify((string) (new UuidFactory())->v4() === '919108f7-52d1-4320-9bac-f847db4148a8', 'RFC A.3');
+    $factory = new UuidFactory();
+    verify((string) $factory->v3(UuidNamespace::Dns, 'www.example.com') === '5df41881-3aed-3515-88a7-2f4a814cf09e', 'RFC A.2');
+    verify((string) $factory->v5(UuidNamespace::Dns, 'www.example.com') === '2ed6657d-e927-568b-95e1-2665a8aea6a2', 'RFC A.4');
+    verify((string) $factory->v8(hex2bin('2489e9ad2ee2'), 0xe00, hex2bin('0ec932d5f69181c0')) === '2489e9ad-2ee2-8e00-8ec9-32d5f69181c0', 'RFC B.1');
+
+    // Reach the RFC A.6 counter via the public API (method 1).
+    $GLOBALS['identityTestInt'] = 0xc3;
+    $GLOBALS['identityTestBytes'] = hex2bin('18c4dc0c0c07398f');
+    $factory = new UuidFactory();
+    for ($i = 0; $i <= 0xc00; ++$i) {
+        $uuid = $factory->v7();
+    }
+    verify((string) $uuid === '017f22e2-79b0-7cc3-98c4-dc0c0c07398f', 'RFC A.6');
+    $GLOBALS['identityTestBytes'] = hex2bin('0123456789abcdef');
+    verify(substr(Uuid::fromString((string) $factory->v7())->bytes, 8) === hex2bin('8123456789abcdef'), 'Fresh rand_b');
+    unset($GLOBALS['identityTestInt'], $GLOBALS['identityTestBytes']);
+
+    foreach (['v1', 'v6', 'v7'] as $method) {
+        $factory = new UuidFactory();
+        $factory->$method();
+        $clone = clone $factory;
+        $restored = unserialize(serialize($factory));
+        verify($restored instanceof UuidFactory, 'Factory restoration');
+        $ids = [(string) $factory->$method(), (string) $clone->$method(), (string) $restored->$method()];
+        verify(count(array_unique($ids)) === count($ids), $method . ' copied state collision');
+
+        if (function_exists('pcntl_fork')) {
+            $factory = new UuidFactory();
+            $factory->$method();
+            $pair = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
+            verify($pair !== false, 'Socket pair');
+            $pid = pcntl_fork();
+            verify($pid !== -1, 'Fork failed');
+            if ($pid === 0) {
+                fclose($pair[0]);
+                fwrite($pair[1], (string) $factory->$method());
+                fclose($pair[1]);
+                exit(0);
+            }
+            fclose($pair[1]);
+            stream_set_timeout($pair[0], 10);
+            $parent = (string) $factory->$method();
+            $child = stream_get_contents($pair[0]);
+            fclose($pair[0]);
+            pcntl_waitpid($pid, $status);
+            verify(pcntl_wifexited($status) && pcntl_wexitstatus($status) === 0 && is_string($child) && strlen($child) === 36, 'Child result');
+            verify($parent !== $child, $method . ' fork collision');
+        }
+    }
+    if (!function_exists('pcntl_fork')) {
+        echo "SKIP actual fork checks: pcntl unavailable\n";
+    }
+
+    foreach (UuidGenerationVersion::cases() as $version) {
+        $factory = unserialize(serialize(new UuidFactory($version)));
+        verify($factory instanceof UuidFactory && Uuid::fromString((string) $factory->generate())->version === $version->value, 'Restored default version');
+    }
+    $class = UuidFactory::class;
+    $key = "\0" . $class . "\0defaultVersion";
+    $legacy = 'O:' . strlen($class) . ':"' . $class . '":1:{' . serialize($key) . serialize(UuidGenerationVersion::V4) . '}';
+    $factory = unserialize($legacy);
+    verify($factory instanceof UuidFactory && Uuid::fromString((string) $factory->generate())->version === 4, 'Legacy serialized factory');
+
+    frozen(0);
+    $GLOBALS['identityTestInt'] = 23;
+    $GLOBALS['identityTestBytes'] = hex2bin('1122334455667788');
+    verify((string) (new UuidFactory())->v7() === '00000000-0000-7017-9122-334455667788', 'Epoch zero');
+    unset($GLOBALS['identityTestInt'], $GLOBALS['identityTestBytes']);
+    frozen(-1, 999999);
+    rejects(fn () => (new UuidFactory())->v7(), OverflowException::class);
+    foreach (['v1', 'v6'] as $method) {
+        frozen(-12219292800);
+        $uuid = Uuid::fromString((string) (new UuidFactory())->$method());
+        verify(substr($uuid->toString(), 0, 13) === '00000000-0000', 'Gregorian epoch zero');
+        frozen(-12219292801);
+        rejects(fn () => (new UuidFactory())->$method(), OverflowException::class);
+        frozen(103072857661);
+        rejects(fn () => (new UuidFactory())->$method(), OverflowException::class);
+    }
+
+    frozen(1645557742);
+    $factory = new UuidFactory();
+    $last = '';
+    for ($i = 0; $i < 9000; ++$i) {
+        if ($i === 100) {
+            frozen(1645557741);
+        }
+        $id = (string) $factory->v7();
+        verify(strcmp($id, $last) > 0, 'v7 monotonicity through rollback/rollover');
+        $last = $id;
+    }
+    verify(unixMs($last) > 1645557742000, 'Synthetic millisecond rollover');
+
+    frozen(281474976710, 655999);
+    $GLOBALS['identityTestInt'] = 0;
+    $factory = new UuidFactory();
+    for ($i = 0; $i < 4096; ++$i) {
+        verify(unixMs((string) $factory->v7()) === 0xffffffffffff, 'Maximum UUIDv7 timestamp');
+    }
+    rejects(fn () => $factory->v7(), OverflowException::class);
+    frozen(281474976710, 656000);
+    rejects(fn () => (new UuidFactory())->v7(), OverflowException::class);
+    unset($GLOBALS['identityTestInt']);
+
+    frozen(1645557742);
+    $factory = new UuidFactory();
+    $first = (string) $factory->v7();
+    $failure = new Random\RandomException('entropy failure');
+    $GLOBALS['identityTestBytes'] = $failure;
+    try {
+        $factory->v7();
+        throw new RuntimeException('Expected entropy failure');
+    } catch (Random\RandomException $caught) {
+        verify($caught === $failure, 'Entropy failure identity');
+    }
+    unset($GLOBALS['identityTestBytes']);
+    verify(strcmp((string) $factory->v7(), $first) > 0, 'Recovery preserves ordering');
+    $GLOBALS['identityTestInt'] = $failure;
+    rejects(fn () => (new UuidFactory())->v7(), Random\RandomException::class);
+    unset($GLOBALS['identityTestInt']);
+    echo "RFC vectors, copied state, fork, time limits, rollback, rollover and entropy checks passed.\n";
+}
