@@ -41,7 +41,10 @@
             "@test"
         ],
         "test:negative": "@php tests/Quality/negative-controls.php",
-        "test:mutation": "@php vendor/bin/pest --configuration=phpunit.mutation.xml --mutate --everything --parallel --processes=4 --no-cache"
+        "test:mutation": [
+            "Composer\\Config::disableProcessTimeout",
+            "@php -d opcache.enable_cli=0 tests/Quality/mutate.php --configuration=phpunit.mutation.xml --mutate --everything --no-cache"
+        ]
     },
     "config": {
         "sort-packages": true,
