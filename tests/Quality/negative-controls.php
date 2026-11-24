@@ -100,6 +100,8 @@ try {
         ['v1 random range below zero', 'UuidFactory.php', '$clockSeq = $this->clockSeq ?? random_int(0, 0x3FFF);', '$clockSeq = $this->clockSeq ?? random_int(-1, 0x3FFF);', $controlled, 'encodes both possible endpoints'],
         ['v1 random range above 14 bits', 'UuidFactory.php', '$clockSeq = $this->clockSeq ?? random_int(0, 0x3FFF);', '$clockSeq = $this->clockSeq ?? random_int(0, 0x4000);', $controlled, 'encodes both possible endpoints'],
         ['v1 sequence truncation on rollback', 'UuidFactory.php', '$clockSeq = ($clockSeq + 1) & 0x3FFF;', '$clockSeq = ($clockSeq + 1) & 0x3FFE;', $controlled, 'increments the v1 clock sequence on an ordinary'],
+        ['minimal namespace ignored', 'UuidFactory.php', 'return Uuid::fromString($namespace->toString())->bytes;', 'return $namespace instanceof Uuid ? $namespace->bytes : str_repeat("\0", 16);', $unit, 'accepts an application UUID implementing only'],
+        ['cloned v1 state reuse', 'UuidFactory.php', "public function __clone(): void\n    {\n        \$this->processId = null;\n        \$this->node = null;\n        \$this->clockSeq = null;\n        \$this->lastV1WallTicks = null;\n    }", 'public function __clone(): void {}', $controlled, 'initializes independent v1 node and sequence'],
         ['forked state reuse', 'UuidFactory.php', 'if ($this->processId !== $pid)', 'if ($this->processId === null)', $unit, 'does not repeat the next UUID across two forked copies'],
     ];
     if (!function_exists('pcntl_fork')) {

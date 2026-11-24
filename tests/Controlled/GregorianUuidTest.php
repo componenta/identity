@@ -149,3 +149,33 @@ it('increments the v1 clock sequence on an ordinary physical clock rollback', fu
         ->and(UuidFields::clockSequence($second))->toBe(3)
         ->and(UuidFields::gregorianTicks($second))->toBeGreaterThan(UuidFields::gregorianTicks($first));
 });
+
+it('initializes independent v1 node and sequence when cloning or restoring a warmed factory', function (): void {
+    System::freeze(1645557742);
+    System::$integer = 11;
+    System::$bytes = hex2bin('001122334455');
+    $factory = new UuidFactory();
+    $first = Uuid::fromString($factory->v1()->toString());
+
+    $clone = clone $factory;
+    $restored = unserialize(serialize($factory));
+
+    System::$integer = 22;
+    System::$bytes = hex2bin('66778899aabb');
+    $copied = Uuid::fromString($clone->v1()->toString());
+
+    System::$integer = 33;
+    System::$bytes = hex2bin('ccddee112233');
+    $restoredValue = Uuid::fromString($restored->v1()->toString());
+    $originalNext = Uuid::fromString($factory->v1()->toString());
+
+    expect(UuidFields::clockSequence($first))->toBe(11)
+        ->and(substr($first->bytes, 10))->toBe(hex2bin('011122334455'))
+        ->and(UuidFields::clockSequence($copied))->toBe(22)
+        ->and(substr($copied->bytes, 10))->toBe(hex2bin('67778899aabb'))
+        ->and(UuidFields::clockSequence($restoredValue))->toBe(33)
+        ->and(substr($restoredValue->bytes, 10))->toBe(hex2bin('cdddee112233'))
+        ->and(UuidFields::clockSequence($originalNext))->toBe(11)
+        ->and(substr($originalNext->bytes, 10))->toBe(hex2bin('011122334455'))
+        ->and($originalNext->equals($first))->toBeFalse();
+});

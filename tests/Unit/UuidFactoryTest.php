@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Componenta\Identity\RfcUuidInterface;
+use Componenta\Identity\Tests\Fixture\TextUuid;
 use Componenta\Identity\Uuid;
 use Componenta\Identity\UuidFactory;
 use Componenta\Identity\UuidGenerationVersion;
@@ -131,4 +132,13 @@ it('accepts both endpoints of the UUIDv8 custom fields', function (string $a, in
 })->with([
     'all zeros' => [str_repeat("\0", 6), 0, str_repeat("\0", 8), '00000000-0000-8000-8000-000000000000'],
     'all ones' => [str_repeat("\xff", 6), 4095, str_repeat("\xff", 8), 'ffffffff-ffff-8fff-bfff-ffffffffffff'],
+]);
+
+it('accepts an application UUID implementing only the minimal contract as a namespace', function (string $method, string $expected): void {
+    $namespace = new TextUuid('6ba7b810-9dad-11d1-80b4-00c04fd430c8');
+
+    expect((new UuidFactory())->$method($namespace, 'www.example.com')->toString())->toBe($expected);
+})->with([
+    'RFC A.2 v3' => ['v3', '5df41881-3aed-3515-88a7-2f4a814cf09e'],
+    'RFC A.4 v5' => ['v5', '2ed6657d-e927-568b-95e1-2665a8aea6a2'],
 ]);
