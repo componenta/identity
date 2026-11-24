@@ -10,9 +10,9 @@ interface ComparableUuidInterface extends UuidInterface
     /**
      * Compares this UUID with another UUID in unsigned network-byte order.
      *
-     * The result is independent of UUID version and variant. Equal means
-     * the same UUID value, not object identity, and agrees with equals()
-     * for conforming operands. The result is a total order (reflexive
+     * All UUID versions and variants are comparable; their bits participate
+     * in the ordering. Equal means the same UUID value, not object identity,
+     * and agrees with equals() for conforming operands. The result is a total order (reflexive
      * equality, reversed order on swapped operands, and transitivity).
      * The operand must satisfy UuidInterface; chronological ordering is
      * not implied.

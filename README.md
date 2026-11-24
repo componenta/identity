@@ -30,6 +30,7 @@ When `componenta/composer-plugin` is installed, the provider is added to the gen
 
 - `UuidInterface`: minimal identity contract with string conversion and equality.
 - `RfcUuidInterface`: UUID contract with `bytes`, `version`, and `variant` properties.
+- `ComparableUuidInterface`: optional contract for ordering UUID values, returning `ComparisonResult`.
 - `Uuid`: immutable RFC UUID value object backed by 16 raw bytes.
 - `UuidFactoryInterface`: generation/from-bytes contract.
 - `UuidFactory`: UUID v1, v3, v4, v5, v6, v7, and v8 generator.

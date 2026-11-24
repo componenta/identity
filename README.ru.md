@@ -30,6 +30,7 @@ composer require componenta/identity
 
 - `UuidInterface`: минимальный контракт identity со string conversion и equality.
 - `RfcUuidInterface`: UUID-контракт со свойствами `bytes`, `version`, `variant`.
+- `ComparableUuidInterface`: необязательный контракт упорядочивания UUID, возвращающий `ComparisonResult`.
 - `Uuid`: иммутабельный RFC UUID-объект значения на базе 16 сырых байт.
 - `UuidFactoryInterface`: контракт генерации и создания из bytes.
 - `UuidFactory`: генератор UUID v1, v3, v4, v5, v6, v7 и v8.
