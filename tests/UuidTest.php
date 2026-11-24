@@ -247,4 +247,54 @@ final class UuidTest extends TestCase
         self::assertTrue($other->equals($uuid));
         self::assertFalse(Uuid::fromString('018f6d5d-3f7a-7a9b-8c2f-123456789abd')->equals($other));
     }
+
+    public function testMalformedUuidInputIsRedactedInLibraryExceptionTraceFrames(): void
+    {
+        // Test explicitly with exception arguments enabled; production PHP can
+        // choose to omit them entirely. The library cannot redact caller frames.
+        $ignoreArgs = ini_get('zend.exception_ignore_args');
+        $maxLength = ini_get('zend.exception_string_param_max_len');
+        self::assertNotFalse(ini_set('zend.exception_ignore_args', '0'));
+        self::assertNotFalse(ini_set('zend.exception_string_param_max_len', '64'));
+
+        try {
+            $invalid = 'private-invalid-uuid-value';
+            $uuid = Uuid::fromString('018f6d5d-3f7a-7a9b-8c2f-123456789abc');
+            $factory = new \Componenta\Identity\UuidFactory();
+            $cases = [
+                static fn () => Uuid::fromString($invalid),
+                static fn () => Uuid::fromBytes($invalid),
+                static fn () => $factory->fromBytes($invalid),
+                static fn () => $uuid->__unserialize(['bytes' => $invalid]),
+                static fn () => $factory->__unserialize(['defaultVersion' => $invalid]),
+            ];
+
+            foreach ($cases as $case) {
+                try {
+                    $case();
+                    self::fail('Malformed UUID input accepted.');
+                } catch (\InvalidArgumentException $exception) {
+                    $checked = 0;
+                    foreach ($exception->getTrace() as $frame) {
+                        if (!in_array($frame['class'] ?? null, [Uuid::class, \Componenta\Identity\UuidFactory::class], true)) {
+                            continue;
+                        }
+                        self::assertArrayHasKey('args', $frame);
+                        self::assertInstanceOf(\SensitiveParameterValue::class, $frame['args'][0]);
+                        ++$checked;
+                    }
+                    self::assertGreaterThan(0, $checked);
+                    self::assertStringNotContainsString($invalid, $exception->getMessage());
+                    self::assertStringNotContainsString($invalid, $exception->getTraceAsString());
+                }
+            }
+        } finally {
+            if ($ignoreArgs !== false) {
+                ini_set('zend.exception_ignore_args', $ignoreArgs);
+            }
+            if ($maxLength !== false) {
+                ini_set('zend.exception_string_param_max_len', $maxLength);
+            }
+        }
+    }
 }

@@ -117,7 +117,7 @@ final class UuidFactory implements UuidFactoryInterface
     }
 
     /** @param array<array-key, mixed> $data */
-    public function __unserialize(array $data): void
+    public function __unserialize(#[\SensitiveParameter] array $data): void
     {
         $version = $data['defaultVersion']
             ?? $data["\0" . self::class . "\0defaultVersion"]
@@ -146,7 +146,7 @@ final class UuidFactory implements UuidFactoryInterface
     /**
      * Creates a UUID from raw 16-octet binary representation.
      */
-    public function fromBytes(string $bytes): RfcUuidInterface
+    public function fromBytes(#[\SensitiveParameter] string $bytes): RfcUuidInterface
     {
         return Uuid::fromBytes($bytes);
     }

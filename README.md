@@ -48,7 +48,7 @@ $uuid->version;    // 7
 $uuid->variant;    // UuidVariant::Rfc
 ```
 
-`Uuid::fromString()` accepts upper-, lower-, and mixed-case hex digits and normalizes output to lowercase canonical form. For compatibility, surrounding characters removed by PHP `trim()` are accepted; validate the original input separately if a strict wire-format check is needed. Invalid input is not copied into exception messages.
+`Uuid::fromString()` accepts upper-, lower-, and mixed-case hex digits and normalizes output to lowercase canonical form. For compatibility, surrounding characters removed by PHP `trim()` are accepted; validate the original input separately if a strict wire-format check is needed. Invalid input is not copied into exception messages. Parsing and native restoration inputs are marked with PHP's `SensitiveParameter` so their argument values are redacted in the library's exception trace frames, even when PHP records arguments. This does not redact caller frames, application logs, or values explicitly extracted from `SensitiveParameterValue`; configure `zend.exception_ignore_args=1` in production and do not deserialize untrusted data.
 
 ## Equality
 

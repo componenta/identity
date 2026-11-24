@@ -37,7 +37,7 @@ final class Uuid implements RfcUuidInterface, \JsonSerializable
      */
     public readonly UuidVariant $variant;
 
-    private function __construct(string $bytes)
+    private function __construct(#[\SensitiveParameter] string $bytes)
     {
         if (strlen($bytes) !== 16) {
             throw new \InvalidArgumentException('UUID bytes must be exactly 16 bytes.');
@@ -58,7 +58,7 @@ final class Uuid implements RfcUuidInterface, \JsonSerializable
      * Surrounding characters removed by PHP trim() are accepted for backwards
      * compatibility. This parser is not a strict validator of the original text.
      */
-    public static function fromString(string $uuid): self
+    public static function fromString(#[\SensitiveParameter] string $uuid): self
     {
         $uuid = trim($uuid);
 
@@ -78,7 +78,7 @@ final class Uuid implements RfcUuidInterface, \JsonSerializable
     /**
      * Creates a UUID from raw 16-byte binary representation.
      */
-    public static function fromBytes(string $bytes): self
+    public static function fromBytes(#[\SensitiveParameter] string $bytes): self
     {
         return new self($bytes);
     }
@@ -127,7 +127,7 @@ final class Uuid implements RfcUuidInterface, \JsonSerializable
     }
 
     /** @param array<array-key, mixed> $data */
-    public function __unserialize(array $data): void
+    public function __unserialize(#[\SensitiveParameter] array $data): void
     {
         $bytes = $data['bytes'] ?? null;
         $version = $data['version'] ?? null;
