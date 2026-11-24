@@ -14,7 +14,7 @@ namespace Componenta\Identity;
  * configurable via {@see UuidGenerationVersion}; UUIDv7 is used by default.
  *
  * Thread safety: UUIDv7, UUIDv1 and UUIDv6 maintain in-process monotonic
- * state. The factory instance should not be shared across truly concurrent
+ * state. The factory is not reentrant and must not be shared across concurrent
  * execution contexts without external synchronization.
  *
  * Cross-process uniqueness is provided with high probability by random bits
