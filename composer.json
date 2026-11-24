@@ -32,6 +32,7 @@
     "scripts": {
         "test": [
             "@php vendor/bin/pest",
+            "@php vendor/bin/pest --configuration=phpunit.controlled.xml",
             "@php tests/generator-contract.php"
         ],
         "stress": "@php -d memory_limit=256M tests/stress.php",

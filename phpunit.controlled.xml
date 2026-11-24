@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="tests/Fixture/controlled-bootstrap.php"
+         colors="true"
+         cacheDirectory=".phpunit.cache/controlled"
+         failOnEmptyTestSuite="true"
+         failOnRisky="true"
+         failOnWarning="true"
+         failOnIncomplete="true">
+    <testsuites>
+        <testsuite name="controlled">
+            <directory>tests/Controlled</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory suffix=".php">src</directory>
+        </include>
+    </source>
+</phpunit>
