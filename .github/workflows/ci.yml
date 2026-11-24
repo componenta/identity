@@ -92,6 +92,12 @@ jobs:
           trap 'rm -rf "$workspace"' EXIT
           mkdir "$workspace/identity" "$workspace/di" "$workspace/consumer"
           git archive HEAD | tar -x -C "$workspace/identity"
+          # The distributed package must contain only its runtime API and user documentation.
+          diff -u <(printf '%s\n' LICENSE README.md README.ru.md composer.json src) \
+            <(find "$workspace/identity" -mindepth 1 -maxdepth 1 -printf '%f\n' | LC_ALL=C sort)
+          test -f "$workspace/identity/LICENSE"
+          test -f "$workspace/identity/composer.json"
+          test -d "$workspace/identity/src"
           git -C .ci/di6 rev-parse HEAD
           git -C .ci/di6 archive HEAD | tar -x -C "$workspace/di"
           cat > "$workspace/consumer/composer.json" <<'JSON'
