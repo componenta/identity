@@ -5,6 +5,11 @@ declare(strict_types=1);
 use Pest\Kernel;
 use Pest\Mutate\Event\Events\TestSuite\FinishMutationSuite;
 use Pest\Mutate\Event\Events\TestSuite\FinishMutationSuiteSubscriber;
+use Pest\Mutate\Event\Events\TestSuite\StartMutationGeneration;
+use Pest\Mutate\Event\Events\TestSuite\StartMutationGenerationSubscriber;
+use Pest\Mutate\Contracts\MutationTestRunner;
+use Pest\Support\Container;
+use Symfony\Component\Process\Process;
 use Pest\Mutate\Event\Facade;
 use Pest\Mutate\Plugins\Mutate;
 use Pest\Mutate\Support\MutationTestResult;
@@ -69,7 +74,47 @@ if ($isWorker) {
         throw new RuntimeException('Requested source replacement was not installed.');
     }
 } elseif ($directory !== false && in_array('--mutate', $arguments, true)) {
-    Facade::instance()->registerSubscribers(new class($directory) implements FinishMutationSuiteSubscriber {
+    Facade::instance()->registerSubscribers(new class($root, $directory) implements StartMutationGenerationSubscriber {
+        public function __construct(private readonly string $root, private readonly string $directory) {}
+
+        public function notify(StartMutationGeneration $event): void
+        {
+            // Pest uses argv[0] directly as an executable. This adapter is a
+            // PHP script, so explicitly include the interpreter and settings.
+            $command = [PHP_BINARY, '-d', 'opcache.enable_cli=0', __FILE__, '--configuration=' . $this->root . '/phpunit.mutation.xml'];
+            Container::getInstance()->get(MutationTestRunner::class)->setOriginalArguments($command);
+
+            // Verify the actual worker path with a behavior-preserving
+            // substitution and the same literal quoted filter as Pest.
+            $source = $this->root . '/src/UuidFactory.php';
+            $replacement = $this->directory . '/control.php';
+            $original = file_get_contents($source);
+            if (!is_string($original) || file_put_contents($replacement, $original . "\n// Mutation worker control.\n") === false) {
+                throw new RuntimeException('Cannot prepare mutation worker control.');
+            }
+            try {
+                $process = new Process([...$command, '--bail', '--filter="matches the RFC A.3 random UUID vector"'], $this->root, [
+                    Mutate::ENV_MUTATION_TESTING => $source,
+                    Mutate::ENV_MUTATION_FILE => $replacement,
+                    'XDEBUG_MODE' => 'off',
+                ], timeout: 30);
+                $process->mustRun();
+                $key = hash('sha256', $source . "\0" . $replacement);
+                $record = json_decode(file_get_contents($this->directory . '/' . $key . '.json'), true, flags: JSON_THROW_ON_ERROR);
+                if ($record['status'] !== 0 || $record['tests'] < 1 || $record['failures'] || $record['errors'] || $record['skipped'] || $record['issues']) {
+                    throw new RuntimeException('Behavior-preserving mutation control did not pass.');
+                }
+                unlink($this->directory . '/' . $key . '.json');
+                echo "\nMutation worker control passed (", $record['tests'], " actual tests).\n";
+            } finally {
+                unlink($replacement);
+            }
+
+            // Coverage has already been collected by the parent.
+            putenv('XDEBUG_MODE=off');
+            $_SERVER['XDEBUG_MODE'] = $_ENV['XDEBUG_MODE'] = 'off';
+        }
+    }, new class($directory) implements FinishMutationSuiteSubscriber {
         public function __construct(private readonly string $directory) {}
 
         public function notify(FinishMutationSuite $event): void
