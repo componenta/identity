@@ -58,8 +58,11 @@ final class UuidFactory implements UuidFactoryInterface
      */
     private ?int $lastGregorianTicks = null;
 
+    /** Last successful physical v1 clock reading, before logical adjustment. */
+    private ?int $lastV1WallTicks = null;
+
     /**
-     * Stable random node ID for v1/v6.
+     * Stable random node ID for v1.
      *
      * Generated lazily with the multicast bit set to avoid exposing MAC
      * addresses.
@@ -67,7 +70,7 @@ final class UuidFactory implements UuidFactoryInterface
     private ?string $node = null;
 
     /**
-     * Stable random 14-bit clock sequence for v1/v6.
+     * Stable random 14-bit clock sequence for v1.
      */
     private ?int $clockSeq = null;
 
@@ -83,7 +86,7 @@ final class UuidFactory implements UuidFactoryInterface
      */
     private int $v7Seq = 0;
 
-    /** Process that owns the cached v1/v6 node and clock sequence. */
+    /** Process that owns the cached v1 node and clock sequence. */
     private ?int $processId = null;
 
     /**
@@ -103,6 +106,7 @@ final class UuidFactory implements UuidFactoryInterface
         $this->processId = null;
         $this->node = null;
         $this->clockSeq = null;
+        $this->lastV1WallTicks = null;
     }
 
     /** @return array{defaultVersion: UuidGenerationVersion} */
@@ -151,7 +155,8 @@ final class UuidFactory implements UuidFactoryInterface
      * Generates a UUIDv1, Gregorian time-based.
      *
      * Uses a random node ID with the multicast bit set to avoid exposing
-     * hardware MAC addresses.
+     * hardware MAC addresses. A physical clock rollback changes the sequence
+     * (RFC 9562 section 5.1). Logical timestamps never go backwards.
      *
      * Layout:
      * time_low (32) | time_mid (16) | version (4) | time_high (12)
@@ -162,25 +167,36 @@ final class UuidFactory implements UuidFactoryInterface
     public function v1(): UuidInterface
     {
         $this->ensureProcessState();
-        $ticks = $this->monotonicGregorianTicks();
+        $wallTicks = $this->gregorianTicks();
+        $ticks = $this->monotonicGregorianTicks($wallTicks);
 
-        $timeLow  = $ticks & 0xFFFFFFFF;
-        $timeMid  = ($ticks >> 32) & 0xFFFF;
-        $timeHigh = ($ticks >> 48) & 0x0FFF;
+        $clockSeq = $this->clockSeq ?? random_int(0, 0x3FFF);
+        if ($this->lastV1WallTicks !== null && $wallTicks < $this->lastV1WallTicks) {
+            $clockSeq = ($clockSeq + 1) & 0x3FFF;
+        }
+        $node = $this->node;
+        if ($node === null) {
+            $node = random_bytes(6);
+            $node[0] = chr(ord($node[0]) | 0x01);
+        }
 
-        $clockSeq = $this->clockSeq();
-        $node     = $this->node();
-
-        $bytes = pack(
+        $uuid = Uuid::fromBytes(pack(
             'NnnCa*',
-            $timeLow,
-            $timeMid,
-            0x1000 | $timeHigh,
+            $ticks & 0xFFFFFFFF,
+            ($ticks >> 32) & 0xFFFF,
+            0x1000 | (($ticks >> 48) & 0x0FFF),
             0x80 | (($clockSeq >> 8) & 0x3F),
             chr($clockSeq & 0xFF) . $node,
-        );
+        ));
 
-        return Uuid::fromBytes($bytes);
+        // Commit successful generation only; entropy failures must not consume
+        // the last representable timestamp or alter the previous sequence.
+        $this->lastGregorianTicks = $ticks;
+        $this->lastV1WallTicks = $wallTicks;
+        $this->clockSeq = $clockSeq;
+        $this->node = $node;
+
+        return $uuid;
     }
 
     /**
@@ -247,6 +263,8 @@ final class UuidFactory implements UuidFactoryInterface
      *
      * Field-compatible with UUIDv1, but reordered for improved database locality.
      * Use {@see self::v7()} for new systems not requiring UUIDv1 compatibility.
+     * Clock sequence and multicast node are freshly randomized for every UUID
+     * as recommended by RFC 9562 sections 5.6 and 6.10.
      *
      * Layout:
      * time_high (48) | version (4) | time_low (12)
@@ -256,22 +274,20 @@ final class UuidFactory implements UuidFactoryInterface
      */
     public function v6(): UuidInterface
     {
-        $this->ensureProcessState();
-        $ticks = $this->monotonicGregorianTicks();
+        $ticks = $this->monotonicGregorianTicks($this->gregorianTicks());
 
-        $timeHigh = ($ticks >> 12) & 0xFFFFFFFFFFFF;
-        $timeLow  = $ticks & 0x0FFF;
+        // Independent 14-bit clock sequence and 47 random node bits.
+        $tail = random_bytes(8);
+        $tail[0] = chr((ord($tail[0]) & 0x3F) | 0x80);
+        $tail[2] = chr(ord($tail[2]) | 0x01);
 
-        $clockSeq = $this->clockSeq();
-        $node     = $this->node();
+        $uuid = Uuid::fromBytes($this->packUint48($ticks >> 12)
+            . pack('n', 0x6000 | ($ticks & 0x0FFF))
+            . $tail);
 
-        $bytes = $this->packUint48($timeHigh)
-            . pack('n', 0x6000 | $timeLow)
-            . chr(0x80 | (($clockSeq >> 8) & 0x3F))
-            . chr($clockSeq & 0xFF)
-            . $node;
+        $this->lastGregorianTicks = $ticks;
 
-        return Uuid::fromBytes($bytes);
+        return $uuid;
     }
 
     /**
@@ -405,10 +421,8 @@ final class UuidFactory implements UuidFactoryInterface
     /**
      * Returns a strictly monotonic Gregorian timestamp for v1/v6.
      */
-    private function monotonicGregorianTicks(): int
+    private function monotonicGregorianTicks(int $ticks): int
     {
-        $ticks = $this->gregorianTicks();
-
         if ($this->lastGregorianTicks !== null && $ticks <= $this->lastGregorianTicks) {
             if ($this->lastGregorianTicks === self::GREGORIAN_TIMESTAMP_MAX) {
                 throw new \OverflowException('Gregorian UUID timestamp exhausted.');
@@ -416,32 +430,7 @@ final class UuidFactory implements UuidFactoryInterface
             $ticks = $this->lastGregorianTicks + 1;
         }
 
-        $this->lastGregorianTicks = $ticks;
-
         return $ticks;
-    }
-
-    /**
-     * Returns the stable random node ID used by v1/v6.
-     */
-    private function node(): string
-    {
-        if ($this->node === null) {
-            $node = random_bytes(6);
-            $node[0] = chr(ord($node[0]) | 0x01);
-
-            $this->node = $node;
-        }
-
-        return $this->node;
-    }
-
-    /**
-     * Returns the stable random 14-bit clock sequence used by v1/v6.
-     */
-    private function clockSeq(): int
-    {
-        return $this->clockSeq ??= random_int(0, 0x3FFF);
     }
 
     /** Do not share cached node/sequence state across process forks. */
@@ -455,6 +444,7 @@ final class UuidFactory implements UuidFactoryInterface
         if ($this->processId !== $pid) {
             $this->node = null;
             $this->clockSeq = null;
+            $this->lastV1WallTicks = null;
             $this->processId = $pid;
         }
     }
