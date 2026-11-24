@@ -282,5 +282,20 @@ namespace {
     $GLOBALS['identityTestInt'] = $failure;
     rejects(fn () => (new UuidFactory())->v7(), Random\RandomException::class);
     unset($GLOBALS['identityTestInt']);
+    // No weak fallback is permitted for the remaining random paths.
+    $GLOBALS['identityTestBytes'] = $failure;
+    rejects(fn () => (new UuidFactory())->v4(), Random\RandomException::class);
+    $factory = new UuidFactory();
+    $GLOBALS['identityTestInt'] = 0;
+    rejects(fn () => $factory->v7(), Random\RandomException::class);
+    unset($GLOBALS['identityTestBytes']);
+    $GLOBALS['identityTestBytes'] = hex2bin('0102030405060708');
+    verify((string) $factory->v7() === '017f22e2-79b0-7000-8102-030405060708', 'V7 failed initial tail does not consume counter');
+    unset($GLOBALS['identityTestBytes'], $GLOBALS['identityTestInt']);
+
+    $GLOBALS['identityTestInt'] = $failure;
+    rejects(fn () => (new UuidFactory())->v1(), Random\RandomException::class);
+    unset($GLOBALS['identityTestInt']);
+
     echo "RFC vectors, copied state, fork, time limits, rollback, rollover and entropy checks passed.\n";
 }

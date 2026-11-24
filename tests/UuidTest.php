@@ -206,4 +206,45 @@ final class UuidTest extends TestCase
         self::assertSame(UuidVariant::Rfc, $graph[0]->variant);
         self::assertTrue($uuid->equals($graph[0]));
     }
+
+    public function testEveryVariantOctetAndVersionNibbleIsPreserved(): void
+    {
+        // Exhaust all 256 variant octets and all 16 raw version nibbles.
+        // The variant is a prefix, not a numeric range of whole UUIDs.
+        for ($octet = 0; $octet < 256; ++$octet) {
+            $expected = match (true) {
+                $octet < 128 => UuidVariant::Ncs,
+                $octet < 192 => UuidVariant::Rfc,
+                $octet < 224 => UuidVariant::Microsoft,
+                default => UuidVariant::Future,
+            };
+            for ($nibble = 0; $nibble < 16; ++$nibble) {
+                $bytes = "\x11\x22\x33\x44\x55\x66" . chr(($nibble << 4) | 0x0a)
+                    . "\xbb" . chr($octet) . "\x99\x88\x77\x66\x55\x44\x33";
+                $uuid = Uuid::fromBytes($bytes);
+
+                self::assertSame($nibble, $uuid->version);
+                self::assertSame($expected, $uuid->variant);
+                self::assertSame($bytes, Uuid::fromString($uuid->toString())->bytes);
+            }
+        }
+    }
+
+    public function testMinimalUuidContractCanParticipateInValueEquality(): void
+    {
+        $uuid = Uuid::fromString('018f6d5d-3f7a-7a9b-8c2f-123456789abc');
+        $other = new readonly class ($uuid->toString()) implements \Componenta\Identity\UuidInterface {
+            public function __construct(private string $text) {}
+            public function __toString(): string { return $this->text; }
+            public function toString(): string { return $this->text; }
+            public function equals(\Componenta\Identity\UuidInterface $other): bool
+            {
+                return $this->text === $other->toString();
+            }
+        };
+
+        self::assertTrue($uuid->equals($other));
+        self::assertTrue($other->equals($uuid));
+        self::assertFalse(Uuid::fromString('018f6d5d-3f7a-7a9b-8c2f-123456789abd')->equals($other));
+    }
 }

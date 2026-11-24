@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Componenta\Identity;
 
 /**
- * Standard namespace UUIDs for name-based UUIDv3 and UUIDv5.
+ * Four namespace UUIDs predefined by RFC 9562 for UUIDv3 and UUIDv5.
+ * Additional registered or application-specific namespaces can be passed as
+ * UuidInterface values; this enum is not an exhaustive IANA registry.
  *
  * @see https://www.rfc-editor.org/rfc/rfc9562
  */

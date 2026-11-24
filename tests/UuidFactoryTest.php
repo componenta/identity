@@ -71,4 +71,40 @@ final class UuidFactoryTest extends TestCase
         self::assertSame(8, $rfcUuid->version);
         self::assertSame(UuidVariant::Rfc, $rfcUuid->variant);
     }
+
+    public function testNameBasedVectorsPreserveExactInputOctets(): void
+    {
+        // Independent reference vectors generated with Python hashlib and uuid.
+        // The custom namespace is deliberately not one of the built-in enums.
+        $namespace = Uuid::fromString('c63c06d8-9c3e-4d1a-b002-2cb47a9e1375');
+        $vectors = [
+            ['', '1b2f9130-1500-3c17-9869-75192794a2bf', '251d6522-009e-5649-97cb-6fcb5306cb87'],
+            ['example', '19f766d7-755e-3748-bb94-ecd1a6dbec58', '3b068c89-8402-5b04-91c3-9a0e9eb77f7d'],
+            ['Example', 'c3368d1e-2631-34f3-b129-7154528143cd', '4640dcb7-f505-5ea4-b661-e9ba84945ced'],
+            ["a\0b\xff", 'a5b568d7-fa57-3a84-97c5-0ef50773071e', 'f81b714c-8a7e-5ea0-8e26-fc37292e557d'],
+            ["\xc3\xa9", 'c7ddd87a-a8ac-3735-9af9-c0737f4dbc43', '67c81f80-4482-54af-8e36-4deb5ef2d91d'],
+            ["e\xcc\x81", '9eefe10b-4819-3948-b5e5-aefe56d1c492', '2e5de8ce-163a-580c-9676-4685cbf72607'],
+        ];
+        $factory = new UuidFactory();
+        foreach ($vectors as [$name, $v3, $v5]) {
+            self::assertSame($v3, $factory->v3($namespace, $name)->toString());
+            self::assertSame($v5, $factory->v5($namespace, $name)->toString());
+        }
+    }
+
+    public function testNamespaceIdentifiersMatchRfc9562Registry(): void
+    {
+        $vectors = [
+            [UuidNamespace::Dns, '6ba7b810-9dad-11d1-80b4-00c04fd430c8'],
+            [UuidNamespace::Url, '6ba7b811-9dad-11d1-80b4-00c04fd430c8'],
+            [UuidNamespace::Oid, '6ba7b812-9dad-11d1-80b4-00c04fd430c8'],
+            [UuidNamespace::X500, '6ba7b814-9dad-11d1-80b4-00c04fd430c8'],
+        ];
+
+        foreach ($vectors as [$namespace, $expected]) {
+            self::assertSame($expected, $namespace->value);
+            self::assertSame($expected, $namespace->toUuid()->toString());
+            self::assertSame($expected, Uuid::fromBytes($namespace->getBytes())->toString());
+        }
+    }
 }
