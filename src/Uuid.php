@@ -14,7 +14,7 @@ namespace Componenta\Identity;
  *
  * @see https://www.rfc-editor.org/rfc/rfc9562
  */
-final class Uuid implements RfcUuidInterface, \JsonSerializable
+final class Uuid implements RfcUuidInterface, ComparableUuidInterface, \JsonSerializable
 {
     /**
      * Canonical UUID textual form:
@@ -117,6 +117,15 @@ final class Uuid implements RfcUuidInterface, \JsonSerializable
         }
 
         return hash_equals($this->toString(), strtolower($other->toString()));
+    }
+
+    public function compareTo(UuidInterface $other): ComparisonResult
+    {
+        $comparison = $other instanceof RfcUuidInterface
+            ? strcmp($this->bytes, $other->bytes)
+            : strcasecmp($this->toString(), $other->toString());
+
+        return ComparisonResult::from($comparison <=> 0);
     }
 
     /** @return array{bytes: string, version: int, variant: UuidVariant} */

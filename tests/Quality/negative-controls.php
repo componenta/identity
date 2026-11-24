@@ -84,6 +84,10 @@ try {
     $controls = [
         ['variant mask', 'Uuid.php', '($octet & 0xC0) === 0x80', '($octet & 0xC0) === 0xC0', $unit, 'preserves every variant octet'],
         ['false equality', 'Uuid.php', 'return hash_equals($this->bytes, $other->bytes);', 'return true;', $unit, 'compares UUID values'],
+        ['inverted UUID order', 'Uuid.php', 'strcmp($this->bytes, $other->bytes)', 'strcmp($other->bytes, $this->bytes)', $unit, 'uses the exact relative order'],
+        ['numeric UUID coercion', 'Uuid.php', 'strcmp($this->bytes, $other->bytes)', '($this->bytes <=> $other->bytes)', $unit, 'does not coerce numeric-looking'],
+        ['case-sensitive UUID text fallback', 'Uuid.php', 'strcasecmp($this->toString(), $other->toString())', 'strcmp($this->toString(), $other->toString())', $unit, 'compares UUIDs from other implementations'],
+        ['constant comparison result', 'Uuid.php', 'return ComparisonResult::from($comparison <=> 0);', 'return ComparisonResult::Equal;', $unit, 'uses the exact relative order'],
         ['untrusted message disclosure', 'Uuid.php', "throw new \\InvalidArgumentException('Invalid UUID string.');", "throw new \\InvalidArgumentException('Invalid UUID string: ' . \$uuid);", $unit, 'does not reflect an arbitrarily long'],
         ['trace disclosure', 'Uuid.php', 'fromString(#[\\SensitiveParameter] string $uuid)', 'fromString(string $uuid)', $unit, 'redacts the input in library exception trace'],
         ['serialized variant tampering', 'Uuid.php', '|| $variant !== self::detectVariant($bytes)', '', $unit, 'rejects inconsistent serialized fields'],

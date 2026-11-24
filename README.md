@@ -104,3 +104,26 @@ Treat UUIDs as opaque identifiers. The timestamp in a time-based UUID is not an 
 - `XDEBUG_MODE=coverage composer test:mutation` runs the mutation diagnostics with Xdebug. Workers verify source replacement and report actual test execution; assertion failures, test errors, survivors, uncovered and unverified outcomes are reported separately. The raw Pest score is not a verified coverage guarantee.
 
 Controlled clock and entropy functions are loaded only through the dedicated test configurations and fixtures, never by the production autoloader. Fork cases are explicitly skipped on Windows. See the [audit report](docs/audits/2026-11-25-identity-pest.md) for the reviewed scenarios and limitations.
+
+## Ordering UUID values
+
+`ComparableUuidInterface` is an optional extension of the minimal UUID contract. The built-in `Uuid` implements it; neither `UuidInterface` nor `RfcUuidInterface` requires ordering from existing consumer implementations.
+
+~~~php
+use Componenta\Identity\ComparableUuidInterface;
+use Componenta\Identity\ComparisonResult;
+use Componenta\Identity\Uuid;
+use Componenta\Identity\UuidInterface;
+
+$left = Uuid::fromString('018f6d5d-3f7a-7a9b-8c2f-123456789abc');
+$right = Uuid::fromString('018f6d5d-3f7a-7a9b-8c2f-123456789abd');
+
+$left->compareTo($right); // ComparisonResult::Less
+$right->compareTo($left); // ComparisonResult::Greater
+$left->compareTo($left);  // ComparisonResult::Equal
+
+$values = [$right, $left];
+usort($values, static fn (ComparableUuidInterface $a, UuidInterface $b): int => $a->compareTo($b)->value);
+~~~
+
+The result enum has stable integer backing values: Less = -1, Equal = 0, Greater = 1. Ordering is lexicographic over the 16 network-order bytes (RFC 9562 § 6.11), equivalently unsigned 128-bit ordering. Operands may use any valid UUID implementation; the RFC interface supplies bytes, while the minimal contract supplies canonical text. Equality of ordering is consistent with `equals()` for conforming UUID values. No timestamp extraction, version/variant restriction, numeric string coercion, or change to native serialization is involved. This order is not a guarantee of chronological creation order, especially for mixed versions, UUIDv1 or independent UUID generators. The minimal factory interface still returns `UuidInterface`; if an application has only that type, check `instanceof ComparableUuidInterface` before requesting ordering. UUID ordering is not a security or authorization operation.
