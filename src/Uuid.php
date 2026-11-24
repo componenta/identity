@@ -126,6 +126,8 @@ final class Uuid implements RfcUuidInterface, \JsonSerializable
     /** Validate native PHP deserialization without changing its wire format. */
     public function __wakeup(): void
     {
+        // Native unserialization bypasses the constructor and can omit any field.
+        // @phpstan-ignore isset.initializedProperty, isset.initializedProperty, isset.initializedProperty
         if (!isset($this->bytes, $this->version, $this->variant)
             || strlen($this->bytes) !== 16
             || $this->version !== ((ord($this->bytes[6]) >> 4) & 0x0F)
