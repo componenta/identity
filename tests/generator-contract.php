@@ -189,6 +189,30 @@ namespace {
     rejects(fn () => (new UuidFactory())->v7(), OverflowException::class);
     unset($GLOBALS['identityTestInt']);
 
+    // Verify actual 60-bit field exhaustion, not just out-of-range input.
+    $maximumTicks = 0x0fffffffffffffff;
+    $unixTicks = $maximumTicks - 0x01b21dd213814000;
+    $maximumSeconds = intdiv($unixTicks, 10000000);
+    $maximumMicros = intdiv($unixTicks % 10000000, 10);
+    foreach (['v1', 'v6'] as $method) {
+        frozen($maximumSeconds, $maximumMicros);
+        $factory = new UuidFactory();
+        $remaining = $unixTicks % 10;
+        for ($i = 0; $i <= $remaining; ++$i) {
+            $hex = str_replace('-', '', (string) $factory->$method());
+            $timestampHex = $method === 'v1'
+                ? substr($hex, 13, 3) . substr($hex, 8, 4) . substr($hex, 0, 8)
+                : substr($hex, 0, 12) . substr($hex, 13, 3);
+            verify((int) hexdec($timestampHex) === $maximumTicks - $remaining + $i, 'Gregorian boundary encoding');
+        }
+        rejects(fn () => $factory->$method(), OverflowException::class);
+    }
+
+    verify((string) (new UuidFactory())->v8(hex2bin('5c146b143c52'), 0xafd, hex2bin('938a375d0df1fbf6')) === '5c146b14-3c52-8afd-938a-375d0df1fbf6', 'RFC B.2 field encoding');
+    foreach ([['short', 0, str_repeat("\0", 8)], [str_repeat("\0", 6), -1, str_repeat("\0", 8)], [str_repeat("\0", 6), 4096, str_repeat("\0", 8)], [str_repeat("\0", 6), 0, 'short']] as [$a, $b, $c]) {
+        rejects(fn () => (new UuidFactory())->v8($a, $b, $c), InvalidArgumentException::class);
+    }
+
     frozen(1645557742);
     $factory = new UuidFactory();
     $first = (string) $factory->v7();

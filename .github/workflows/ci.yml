@@ -24,4 +24,6 @@ jobs:
           tools: composer:v2
       - run: composer validate --strict
       - run: composer install --no-interaction --prefer-dist
+      - run: composer audit --no-interaction
       - run: composer check
+      - run: composer stress

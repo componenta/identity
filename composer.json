@@ -34,6 +34,7 @@
             "@php vendor/bin/phpunit --bootstrap vendor/autoload.php tests",
             "@php tests/generator-contract.php"
         ],
+        "stress": "@php -d memory_limit=256M tests/stress.php",
         "phpstan": "@php vendor/bin/phpstan analyse src --level=max",
         "check": [
             "@phpstan",
