@@ -31,11 +31,10 @@
     },
     "scripts": {
         "test": [
-            "@php vendor/bin/pest",
-            "@php vendor/bin/pest --configuration=phpunit.controlled.xml",
-            "@php tests/generator-contract.php"
+            "@php vendor/bin/pest --exclude-group=stress",
+            "@php vendor/bin/pest --configuration=phpunit.controlled.xml"
         ],
-        "stress": "@php -d memory_limit=256M tests/stress.php",
+        "stress": "@php -d memory_limit=256M vendor/bin/pest --group=stress",
         "phpstan": "@php vendor/bin/phpstan analyse src --level=max",
         "check": [
             "@phpstan",
