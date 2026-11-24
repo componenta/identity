@@ -124,3 +124,28 @@ it('fails closed when the OS cannot identify the process owning v1 state', funct
     System::$pid = false;
     expect(fn () => (new UuidFactory())->v1())->toThrow(RuntimeException::class, 'Unable to determine UUID generator process.');
 });
+
+it('encodes both possible endpoints of the initial v1 random clock sequence', function (bool $upper, int $expected): void {
+    System::freeze(1645557742);
+    System::$integer = static fn (int $min, int $max): int => $upper ? $max : $min;
+    System::$bytes = hex2bin('001122334455');
+
+    expect(UuidFields::clockSequence((new UuidFactory())->v1()))->toBe($expected);
+})->with([
+    'lower endpoint' => [false, 0],
+    'upper endpoint' => [true, 16383],
+]);
+
+it('increments the v1 clock sequence on an ordinary physical clock rollback', function (): void {
+    System::freeze(1645557742);
+    System::$integer = 2;
+    System::$bytes = hex2bin('001122334455');
+    $factory = new UuidFactory();
+    $first = $factory->v1();
+    System::freeze(1645557741);
+    $second = $factory->v1();
+
+    expect(UuidFields::clockSequence($first))->toBe(2)
+        ->and(UuidFields::clockSequence($second))->toBe(3)
+        ->and(UuidFields::gregorianTicks($second))->toBeGreaterThan(UuidFields::gregorianTicks($first));
+});

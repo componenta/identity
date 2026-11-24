@@ -12,7 +12,7 @@ final class ControlledSystem
     /** @var array{sec: int, usec: int}|null */
     public static ?array $time = null;
     public static int|false|null $pid = null;
-    public static int|Throwable|null $integer = null;
+    public static int|\Closure|Throwable|null $integer = null;
     public static string|Throwable|null $bytes = null;
 
     public static function freeze(int $seconds, int $microseconds = 0): void

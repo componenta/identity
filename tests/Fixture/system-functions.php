@@ -24,6 +24,9 @@ function random_int(int $min, int $max): int
     if ($value === null) {
         return \random_int($min, $max);
     }
+    if ($value instanceof \Closure) {
+        $value = $value($min, $max);
+    }
     if ($value < $min || $value > $max) {
         throw new RuntimeException('Entropy fixture outside requested range.');
     }

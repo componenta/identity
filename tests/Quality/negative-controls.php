@@ -93,6 +93,9 @@ try {
         ['v7 reused entropy', 'UuidFactory.php', '$randB = random_bytes(8);', '$randB = str_repeat("\\0", 8);', $controlled, 'refreshes the v7 random tail'],
         ['v7 rollover guard', 'UuidFactory.php', 'elseif ($this->v7Seq === self::V7_SEQUENCE_MAX)', 'elseif ($this->v7Seq > self::V7_SEQUENCE_MAX)', $controlled, 'fails rather than wrapping the largest'],
         ['v7 initial entropy failure consumes prefix', 'UuidFactory.php', '$randB = random_bytes(8);', '$this->v7LastMs = $ms; $this->v7Seq = $seq; $randB = random_bytes(8);', $controlled, 'recovers after entropy acquisition fails during initial generation'],
+        ['v1 random range below zero', 'UuidFactory.php', '$clockSeq = $this->clockSeq ?? random_int(0, 0x3FFF);', '$clockSeq = $this->clockSeq ?? random_int(-1, 0x3FFF);', $controlled, 'encodes both possible endpoints'],
+        ['v1 random range above 14 bits', 'UuidFactory.php', '$clockSeq = $this->clockSeq ?? random_int(0, 0x3FFF);', '$clockSeq = $this->clockSeq ?? random_int(0, 0x4000);', $controlled, 'encodes both possible endpoints'],
+        ['v1 sequence truncation on rollback', 'UuidFactory.php', '$clockSeq = ($clockSeq + 1) & 0x3FFF;', '$clockSeq = ($clockSeq + 1) & 0x3FFE;', $controlled, 'increments the v1 clock sequence on an ordinary'],
         ['forked state reuse', 'UuidFactory.php', 'if ($this->processId !== $pid)', 'if ($this->processId === null)', $unit, 'does not repeat the next UUID across two forked copies'],
     ];
     if (!function_exists('pcntl_fork')) {

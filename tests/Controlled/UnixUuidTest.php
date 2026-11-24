@@ -143,3 +143,23 @@ it('encodes microsecond readings using the containing Unix millisecond', functio
     [1000, 1645557742001],
     [999999, 1645557742999],
 ]);
+
+it('encodes the lower endpoint of a random v7 seed at initialization and rollover', function (): void {
+    System::freeze(1645557742);
+    System::$integer = static fn (int $min, int $max): int => $min;
+    System::$bytes = str_repeat("\x11", 8);
+    $factory = new UuidFactory();
+
+    $first = Uuid::fromString($factory->v7()->toString());
+    expect($first->version)->toBe(7)
+        ->and(UuidFields::counter($first))->toBe(0);
+
+    for ($i = 1; $i <= 4095; ++$i) {
+        $factory->v7();
+    }
+
+    $next = Uuid::fromString($factory->v7()->toString());
+    expect($next->version)->toBe(7)
+        ->and(UuidFields::unixMilliseconds($next))->toBe(1645557742001)
+        ->and(UuidFields::counter($next))->toBe(0);
+});
