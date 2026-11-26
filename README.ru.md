@@ -1,5 +1,7 @@
 # Componenta Identity
 
+Провайдер конфигурации поддерживает Componenta Config 3 и 4.
+
 [English](README.md)
 
 Неизменяемые объекты-значения UUID, генерация UUID и контракты идентификации доменных сущностей на PHP. Поддерживаются версии 1, 3, 4, 5, 6, 7 и 8 по [RFC 9562](https://www.rfc-editor.org/rfc/rfc9562.html). По умолчанию генерируется UUIDv7.
@@ -14,7 +16,7 @@ composer require componenta/identity
 
 - PHP 8.4 или новее в пределах ветки 8.x.
 - 64-разрядная среда PHP для генерации UUID.
-- `componenta/config ^3.0`, устанавливается автоматически через Composer.
+- `componenta/config ^3.0 || ^4.0`, устанавливается автоматически через Composer.
 
 Пакет не требует Ramsey UUID.
 

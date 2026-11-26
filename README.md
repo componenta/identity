@@ -1,5 +1,7 @@
 # Componenta Identity
 
+The configuration provider supports Componenta Config 3 and 4.
+
 [Русский](README.ru.md)
 
 Immutable UUID value objects, UUID generation, and domain identity contracts for PHP. Supports [RFC 9562](https://www.rfc-editor.org/rfc/rfc9562.html) UUID versions 1, 3, 4, 5, 6, 7 and 8, with UUIDv7 as the default generator.
@@ -14,7 +16,7 @@ Requirements:
 
 - PHP 8.4 or later within the 8.x series.
 - A 64-bit PHP runtime for UUID generation.
-- `componenta/config ^3.0`, installed automatically by Composer.
+- `componenta/config ^3.0 || ^4.0`, installed automatically by Composer.
 
 The package does not require Ramsey UUID.
 
